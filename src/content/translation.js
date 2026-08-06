@@ -155,26 +155,38 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
     var isBatchMode = !settings.lazyTranslate && unCachedBlocks.length > 30;
     var { batchSize, concurrency } = getBatchConfig(settings.translationMode, isBatchMode);
 
-    var batches = [];
+    var batchesQueue = [];
+    var batchIdCounter = 0;
     for (let i = 0; i < unCachedBlocks.length; i += batchSize) {
-      batches.push(unCachedBlocks.slice(i, i + batchSize));
+      batchesQueue.push({ 
+        id: batchIdCounter++, 
+        batch: unCachedBlocks.slice(i, i + batchSize), 
+        availableAt: 0, 
+        retryCount: 0 
+      });
     }
 
-    var currentIndex = 0;
+    var pendingBatches = batchesQueue.length;
 
     async function worker() {
-      while (currentIndex < batches.length) {
-        // 번역이 취소(revert)되면 두 플래그 모두 false가 됨
-        if (!state.isTranslated && !state.isTranslating) break; 
-        var batchIdx = currentIndex++;
-        var batch = batches[batchIdx];
+      while (pendingBatches > 0) {
+        if (!state.isTranslated && !state.isTranslating) break;
 
-        // API Rate Limit 방지를 위한 딜레이 (일괄 번역 모드 시)
-        if (isBatchMode && batchIdx > 0) {
+        var readyIdx = batchesQueue.findIndex(b => Date.now() >= b.availableAt);
+        if (readyIdx === -1) {
+          // 대기 중인 배치는 있으나 10초 쿨타임이 안 끝난 경우 잠시 대기
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+
+        var item = batchesQueue.splice(readyIdx, 1)[0];
+        var batch = item.batch;
+
+        // API Rate Limit 방지를 위한 딜레이 (일괄 번역 모드 시 첫 시도에만)
+        if (isBatchMode && item.id > 0 && item.retryCount === 0) {
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
 
-        // [P1 FIX #8] 최소 개입: 구조적 오류(연도+시각 붙음)만 분리
         var texts = batch.map((b) => normalizeDateTimes(b.text));
 
         try {
@@ -202,21 +214,17 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
           batch.forEach((block, idx) => {
             if (idx < result.translations.length && result.translations[idx]) {
               var rawTranslation = result.translations[idx];
-              // [P0 FIX #1] 화면에는 사전 적용 결과 표시
               var transText = applyLocalDictionary(rawTranslation, dict);
-              // [P0 FIX #3] 동기적 DOM 업데이트
               applyTranslation(
                 block.element, block.originalHTML, transText,
                 settings.displayMode, block.isPure, block.isWrapper || false,
                 result?.engine || settings.translationMode
               );
-              // [P0 FIX #1] 캐시에는 순수 API 결과만 저장 (사전 변경 시에도 안전)
               newCacheEntries[block.text] = rawTranslation;
               state.localCache[block.text] = rawTranslation;
             }
           });
 
-          // [P1 FIX #10] 새 캐시 fire-and-forget (응답 대기 없음)
           if (Object.keys(newCacheEntries).length > 0) {
             try {
               chrome.runtime.sendMessage({
@@ -227,24 +235,39 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
             } catch { /* fire-and-forget */ }
           }
 
-        } catch (err) {
-          // 시간초과(AbortError) 또는 배치 오류는 해당 배치만 스킵, 전체 중단 방지
-          var isTimeout = err.name === "AbortError" || err.message?.includes("timed out") || err.message?.includes("timeout");
-          if (isTimeout) {
-            console.warn(`[WebTranslator] 배치 ${batchIdx} 시간초과 — 스킵하고 계속 진행`, err);
-          } else {
-            console.warn(`[WebTranslator] 배치 ${batchIdx} 오류 — 스킵하고 계속 진행`, err);
-          }
-          // globalError를 설정하지 않아 다음 배치가 계속 진행됨
-        }
+          completed += batch.length;
+          if (onProgress) onProgress(completed);
+          pendingBatches--;
 
-        completed += batch.length;
-        if (onProgress) onProgress(completed);
+        } catch (err) {
+          var errMsg = err.message || "";
+          var isRateLimit = errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("한도 초과") || errMsg.includes("과부하") || errMsg.includes("RESOURCE_EXHAUSTED");
+
+          if (isRateLimit) {
+            item.retryCount++;
+            item.availableAt = Date.now() + 10000; // 10초 대기 후 다시 시도 가능
+            batchesQueue.push(item);
+            console.warn(`[WebTranslator] 배치 ${item.id} 한도 초과(429/503). 10초 후 재시도 큐에 추가됨 (재시도 ${item.retryCount}회차)`);
+          } else {
+            var isTimeout = err.name === "AbortError" || errMsg.includes("timed out") || errMsg.includes("timeout");
+            if (isTimeout) {
+              console.warn(`[WebTranslator] 배치 ${item.id} 시간초과 — 스킵하고 계속 진행`, err);
+            } else {
+              console.warn(`[WebTranslator] 배치 ${item.id} 오류 — 스킵하고 계속 진행`, err);
+            }
+            
+            // 다른 에러의 경우 스킵 처리하되 완료 카운트는 올려서 프로그레스 바 갱신
+            completed += batch.length;
+            if (onProgress) onProgress(completed);
+            pendingBatches--;
+          }
+        }
       }
     }
 
     var workers = [];
-    for (let i = 0; i < Math.min(concurrency, batches.length); i++) {
+    var activeWorkerCount = Math.min(concurrency, pendingBatches);
+    for (let i = 0; i < activeWorkerCount; i++) {
       workers.push(worker());
     }
 

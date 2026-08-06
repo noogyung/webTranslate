@@ -25,22 +25,8 @@ export async function fetchAvailableGeminiModels(apiKey) {
 }
 
 export async function getValidGeminiModel(apiKey, preferredModel) {
-  const available = await fetchAvailableGeminiModels(apiKey).catch(() => []);
-  if (available.length === 0) return preferredModel || "gemini-flash-lite-latest";
-
-  if (preferredModel && available.includes(preferredModel)) {
-    return preferredModel;
-  }
-
-  const valid =
-    available.find((m) => m.includes("flash-lite-latest")) ||
-    available.find((m) => m.includes("flash-latest")) ||
-    available.find((m) => m.includes("2.5") && m.includes("flash")) ||
-    available.find((m) => m.includes("2.0") && m.includes("flash")) ||
-    available.find((m) => m.includes("flash")) ||
-    available[0];
-
-  return valid || preferredModel || "gemini-flash-lite-latest";
+  // 사용자가 지정한 모델을 최우선으로 사용하며 임의로 다른 모델로 전환하지 않음
+  return preferredModel || "gemini-flash-lite-latest";
 }
 
 export async function translateWithGemini(texts, targetLang, apiKey, modelName = "gemini-2.0-flash", options = {}) {
@@ -73,58 +59,25 @@ export async function translateWithGemini(texts, targetLang, apiKey, modelName =
   return results;
 }
 
-async function _geminiRequestWithRetry(texts, langName, apiKey, modelName, attempt = 0, blacklisted = new Set(), options = {}) {
+async function _geminiRequestWithRetry(texts, langName, apiKey, modelName, attempt = 0, options = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   try {
     return await _geminiRequest(texts, langName, url, options);
   } catch (err) {
-    const is404 = err.message.includes("404") || err.message.includes("is not found") || err.message.includes("not supported");
-    const isQuotaZero = err.message.includes("limit: 0") || err.message.includes("limit:0") || err.message.includes("limit: 3");
     const is429 = err.message.includes("429") || err.message.includes("Quota exceeded") || err.message.includes("RESOURCE_EXHAUSTED") || err.message.includes("503") || err.message.includes("overloaded");
-
-    if (is404 || isQuotaZero) {
-      blacklisted.add(modelName);
-      if (attempt < 3) {
-        console.warn(`[WebTranslator] 모델 '${modelName}' 불가 ➔ 블랙리스트 등록 [${Array.from(blacklisted).join(', ')}]`);
-        const availableModels = await fetchAvailableGeminiModels(apiKey).catch(() => []);
-        
-        const validCandidates = availableModels.filter((m) => !blacklisted.has(m));
-        
-        const fallback = validCandidates.find((m) => m.includes("2.0") && m.includes("flash")) ||
-                         validCandidates.find((m) => m.includes("flash")) ||
-                         validCandidates.find((m) => m.includes("pro")) ||
-                         validCandidates[0];
-
-        if (fallback) {
-          console.warn(`[WebTranslator] 대체 가용 모델 '${fallback}'(으)로 자동 전환하여 재시도`);
-          return _geminiRequestWithRetry(texts, langName, apiKey, fallback, attempt + 1, blacklisted, options);
-        }
-      }
-    }
 
     if (is429) {
       if (attempt < 2) {
         const waitMs = 1500 * Math.pow(2, attempt);
-        console.warn(`[WebTranslator] Gemini 429 — ${waitMs}ms 대기 후 재시도 (${attempt + 1}/2)`);
+        console.warn(`[WebTranslator] Gemini 429/503 — ${waitMs}ms 대기 후 동일 모델('${modelName}')로 재시도 (${attempt + 1}/2)`);
         await new Promise((r) => setTimeout(r, waitMs));
-        return _geminiRequestWithRetry(texts, langName, apiKey, modelName, attempt + 1, blacklisted, options);
+        return _geminiRequestWithRetry(texts, langName, apiKey, modelName, attempt + 1, options);
       }
-      
-      blacklisted.add(modelName);
-      const availableModels = await fetchAvailableGeminiModels(apiKey).catch(() => []);
-      const validCandidates = availableModels.filter((m) => !blacklisted.has(m));
-      const fallback = validCandidates.find((m) => m.includes("2.0") && m.includes("flash")) ||
-                       validCandidates.find((m) => m.includes("flash")) ||
-                       validCandidates[0];
-      if (fallback) {
-        console.warn(`[WebTranslator] 모델 '${modelName}' 429/503 ➔ 대체 가용 모델 '${fallback}'(으)로 전환`);
-        return _geminiRequestWithRetry(texts, langName, apiKey, fallback, attempt + 1, blacklisted, options);
-      }
-
       throw new Error(`Gemini API 요청 한도 초과 또는 일시적 서버 과부하 (429/503)`);
     }
 
+    // 404, QuotaZero 등 다른 에러는 자동 대체하지 않고 즉시 에러 반환
     throw err;
   }
 }
@@ -167,7 +120,7 @@ async function _geminiRequest(texts, langName, url, options = {}) {
   return translations.slice(0, texts.length);
 }
 
-export async function fetchGeminiDictionary(word, targetLang, apiKey, modelName, attempt = 0, blacklisted = new Set()) {
+export async function fetchGeminiDictionary(word, targetLang, apiKey, modelName, attempt = 0) {
   const langName = getLanguageName(targetLang);
   const activeModel = await getValidGeminiModel(apiKey, modelName);
 
@@ -188,33 +141,18 @@ export async function fetchGeminiDictionary(word, targetLang, apiKey, modelName,
     const errMsg = errObj.error?.message || `HTTP ${response.status}`;
     const errStr = `Gemini(${activeModel}) ${response.status}: ${errMsg}`;
     
-    const is404 = errStr.includes("404") || errStr.includes("is not found") || errStr.includes("not supported");
-    const isQuotaZero = errStr.includes("limit: 0") || errStr.includes("limit:0") || errStr.includes("limit: 3");
     const is429 = errStr.includes("429") || errStr.includes("Quota exceeded") || errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("503") || errStr.includes("overloaded");
 
-    if (is404 || isQuotaZero || is429) {
+    if (is429) {
       if (attempt < 2) {
-        blacklisted.add(activeModel);
-        const availableModels = await fetchAvailableGeminiModels(apiKey).catch(() => []);
-        const validCandidates = availableModels.filter((m) => !blacklisted.has(m));
-        
-        const fallback = validCandidates.find((m) => m.includes("2.0") && m.includes("flash")) ||
-                         validCandidates.find((m) => m.includes("flash")) ||
-                         validCandidates[0];
-                         
-        if (fallback) {
-          if (is429) {
-            const waitMs = 1500 * Math.pow(2, attempt);
-            console.warn(`[WebTranslator] Gemini Dictionary 429/503 — ${waitMs}ms 대기 후 대체 모델 '${fallback}'(으)로 재시도 (${attempt + 1}/2)`);
-            await new Promise((r) => setTimeout(r, waitMs));
-          } else {
-            console.warn(`[WebTranslator] 사전 모델 '${activeModel}' 불가 ➔ 대체 모델 '${fallback}'(으)로 재시도`);
-          }
-          return fetchGeminiDictionary(word, targetLang, apiKey, fallback, attempt + 1, blacklisted);
-        }
+        const waitMs = 1500 * Math.pow(2, attempt);
+        console.warn(`[WebTranslator] Gemini Dictionary 429/503 — ${waitMs}ms 대기 후 동일 모델('${activeModel}')로 재시도 (${attempt + 1}/2)`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        return fetchGeminiDictionary(word, targetLang, apiKey, activeModel, attempt + 1);
       }
     }
     
+    // 다른 모델로의 자동 전환 로직 제거 (실패 시 즉시 예외 반환)
     throw new Error(errStr);
   }
 
