@@ -18,14 +18,24 @@
   ],
 
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "src/background/index.js",
     "type": "module"
   },
 
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": [
+        "src/content/state.js",
+        "src/content/api.js",
+        "src/content/utils.js",
+        "src/content/dom.js",
+        "src/content/ui.js",
+        "src/content/dictionary.js",
+        "src/content/translation.js",
+        "src/content/observer.js",
+        "src/content/index.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
