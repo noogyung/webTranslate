@@ -273,7 +273,7 @@
       <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <div class="field-label" style="font-size: 15px; color: #f8fafc; margin: 0;">번역 테마 스타일 설정</div>
-          <button type="button" id="resetStyleBtn" class="btn-secondary" style="padding: 3px 8px; font-size: 12px;">스타일 초기화</button>
+          <button type="button" id="resetStyleBtn" class="btn-danger">스타일 초기화</button>
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 14px;">
           <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #cbd5e1; cursor: pointer;">
@@ -375,6 +375,15 @@
           <option value="ms">🇲🇾 말레이어 (Malay)</option>
         </select>
       </div>
+
+      <div class="field-row" style="margin-top: 1rem;">
+        <label class="field-label" for="customShortcut">번역 단축키</label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input type="text" id="customShortcut" class="text-input" placeholder="여기를 클릭하고 단축키를 입력하세요" readonly style="cursor: pointer; flex: 1;" />
+          <button type="button" id="resetShortcutBtn" class="btn-danger" style="white-space: nowrap;">초기화</button>
+        </div>
+        <div class="help-text">단축키를 누른 후 하단의 저장 버튼을 클릭하세요. 기본값은 Alt+A 입니다.</div>
+      </div>
     </section>
 
     <!-- 저장 및 캐시 관리 버튼 -->
@@ -383,7 +392,7 @@
         <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
         설정 저장
       </button>
-      <button type="button" id="clearCacheBtn" class="btn-secondary" style="background-color: #ef4444; color: white; margin-left: 10px;">
+      <button type="button" id="clearCacheBtn" class="btn-danger" style="margin-left: 10px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
         캐시 초기화
       </button>
@@ -415,7 +424,7 @@
         <button type="button" id="addDictRowBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px;">+ 행 추가</button>
         <button type="button" id="importCsvBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px;">📥 CSV/엑셀 가져오기</button>
         <button type="button" id="exportCsvBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px;">📤 CSV 내보내기</button>
-        <button type="button" id="clearDictBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px; color: #f87171; border-color: rgba(248,113,113,0.3);">🗑️ 전체 삭제</button>
+        <button type="button" id="clearDictBtn" class="btn-danger">사전 전체 삭제</button>
         <input type="file" id="csvFileInput" accept=".csv,.tsv,.txt" style="display: none;" />
       </div>
 
@@ -451,10 +460,6 @@
     </div>
   </div>
 
-  <script src="src/options/dom.js"></script>
-  <script src="src/options/ui.js"></script>
-  <script src="src/options/dictionary.js"></script>
-  <script src="src/options/api.js"></script>
-  <script src="src/options/index.js"></script>
+  <script src="options.js"></script>
 </body>
 </html>

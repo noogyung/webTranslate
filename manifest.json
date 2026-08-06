@@ -4,7 +4,6 @@
   "version": "3.0.0",
   "description": "__MSG_appDescription__",
   "default_locale": "ko",
-
   "permissions": [
     "activeTab",
     "storage",
@@ -12,42 +11,39 @@
     "contextMenus",
     "declarativeNetRequest"
   ],
-
   "host_permissions": [
     "<all_urls>"
   ],
-
   "background": {
-    "service_worker": "src/background/index.js",
+    "service_worker": "background.js",
     "type": "module"
   },
-
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": [
-        "src/content/state.js",
-        "src/content/api.js",
-        "src/content/utils.js",
-        "src/content/dom.js",
-        "src/content/ui.js",
-        "src/content/dictionary.js",
-        "src/content/translation.js",
-        "src/content/observer.js",
-        "src/content/index.js"
+      "matches": [
+        "<all_urls>"
       ],
-      "css": ["content.css"],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
-
   "web_accessible_resources": [
     {
-      "resources": ["modules/*", "lib/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "modules/*",
+        "lib/*",
+        "src/content/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
-
   "commands": {
     "translate-page": {
       "suggested_key": {
@@ -56,16 +52,13 @@
       "description": "현재 페이지 번역 토글"
     }
   },
-
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
   },
-
   "action": {
     "default_title": "Web Translator 설정"
   },
-
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
