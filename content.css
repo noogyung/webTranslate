@@ -83,7 +83,7 @@ html[data-wt-inline-highlight="true"] .wt-dual-inline {
 /* 옵션 4. 원문 글자 색상 따라가기 */
 html[data-wt-inline-inherit="true"]:not([data-wt-inline-adaptive="true"]) .wt-translation,
 html[data-wt-inline-inherit="true"]:not([data-wt-inline-adaptive="true"]) [class*="wt-dual-"] {
-  color: inherit !important;
+  color: var(--wt-inline-inherit-color, inherit) !important;
 }
 
 /* 옵션 3. 환경 적응 인라인 글자 색상 (JS에서 배경색을 추적해 대비 계산) */
