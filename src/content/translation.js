@@ -241,19 +241,28 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
 
         } catch (err) {
           var errMsg = err.message || "";
-          var isRateLimit = errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("한도 초과") || errMsg.includes("과부하") || errMsg.includes("RESOURCE_EXHAUSTED");
+          
+          if (errMsg.includes("Extension context invalidated")) {
+            console.error(`[WebTranslator] 확장 프로그램이 업데이트되었거나 재시작되었습니다. 페이지를 새로고침해주세요.`);
+            // 새로고침 필요하므로 전체 진행 중단
+            pendingBatches = 0;
+            break;
+          }
 
-          if (isRateLimit) {
+          var isRateLimit = errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("한도 초과") || errMsg.includes("과부하") || errMsg.includes("RESOURCE_EXHAUSTED");
+          var isCommunicationError = errMsg.includes("message port closed") || errMsg.includes("Background script returned undefined") || errMsg.includes("Failed to send message") || errMsg.includes("비어 있습니다");
+
+          if ((isRateLimit || isCommunicationError) && item.retryCount < 3) {
             item.retryCount++;
-            item.availableAt = Date.now() + 10000; // 10초 대기 후 다시 시도 가능
+            item.availableAt = Date.now() + (isRateLimit ? 10000 : 3000); // 통신 오류는 3초, 한도 초과는 10초 대기
             batchesQueue.push(item);
-            console.warn(`[WebTranslator] 배치 ${item.id} 한도 초과(429/503). 10초 후 재시도 큐에 추가됨 (재시도 ${item.retryCount}회차)`);
+            console.warn(`[WebTranslator] 배치 ${item.id} 일시적 오류("${errMsg}"). 재시도 큐에 추가됨 (재시도 ${item.retryCount}/3 회차)`);
           } else {
             var isTimeout = err.name === "AbortError" || errMsg.includes("timed out") || errMsg.includes("timeout");
             if (isTimeout) {
               console.warn(`[WebTranslator] 배치 ${item.id} 시간초과 — 스킵하고 계속 진행`, err);
             } else {
-              console.warn(`[WebTranslator] 배치 ${item.id} 오류 — 스킵하고 계속 진행`, err);
+              console.warn(`[WebTranslator] 배치 ${item.id} 오류 — 스킵하고 계속 진행 (재시도 초과 또는 치명적 오류)`, err);
             }
             
             // 다른 에러의 경우 스킵 처리하되 완료 카운트는 올려서 프로그레스 바 갱신
