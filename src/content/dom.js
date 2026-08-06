@@ -351,10 +351,44 @@ import { checkIsPureText, getTranslatableText, normalizeWS, shouldTranslateText,
         span.textContent = translatedText;
       }
 
-      // 옵션 1: 텍스트 그림자 색상 동적 계산 (원문 글자 색상 기준)
+      // 원문 글자 색상을 더 정확하게 추출하기 위해 텍스트 노드를 직접 감싸고 있는 요소를 탐색
+      // 단, 전체 텍스트 중 일부만 <a> 태그인 경우 <a>의 색상(파란색 등)이 전체 번역문에 적용되는 것을 막기 위해 <a> 내부 텍스트는 우선 제외
+      var actualTextElement = element;
+      var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (node.textContent.trim().length === 0) return NodeFilter.FILTER_SKIP;
+          if (element.tagName !== "A" && node.parentElement && node.parentElement.closest("a")) {
+            return NodeFilter.FILTER_SKIP;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      
+      var foundTextNode = walker.nextNode();
+      if (!foundTextNode) {
+        // 모든 텍스트가 <a> 안에만 있는 경우 등에는 조건 없이 첫 텍스트 노드 탐색
+        var fallbackWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+          acceptNode(node) {
+            return node.textContent.trim().length > 0 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          }
+        });
+        foundTextNode = fallbackWalker.nextNode();
+      }
+
+      if (foundTextNode) {
+        actualTextElement = foundTextNode.parentElement || element;
+      }
+
+      // 옵션 4(상속)를 위해 계산된 실제 원문 글자 색상을 CSS 변수로 저장
+      try {
+        var computedTextColor = window.getComputedStyle(actualTextElement).color;
+        span.style.setProperty("--wt-inline-inherit-color", computedTextColor);
+      } catch(e) {}
+
+      // 옵션 1: 텍스트 그림자 색상 동적 계산 (실제 원문 글자 색상 기준)
       if (state.cachedSettings?.inlineShadow) {
         try {
-          var color = window.getComputedStyle(element).color;
+          var color = window.getComputedStyle(actualTextElement).color;
           var rgbMatch = color.match(/\d+/g);
           if (rgbMatch && rgbMatch.length >= 3) {
             var r = parseInt(rgbMatch[0]), g = parseInt(rgbMatch[1]), b = parseInt(rgbMatch[2]);
@@ -367,7 +401,7 @@ import { checkIsPureText, getTranslatableText, normalizeWS, shouldTranslateText,
       // 옵션 3: 환경 적응 색상 (실제 투명하지 않은 가장 가까운 시각적 배경색 탐색)
       if (state.cachedSettings?.inlineAdaptiveColor) {
         try {
-          var bgNode = element;
+          var bgNode = actualTextElement;
           var bgColor = null;
           while (bgNode && bgNode.nodeType === Node.ELEMENT_NODE) {
             var bg = window.getComputedStyle(bgNode).backgroundColor;
@@ -382,7 +416,7 @@ import { checkIsPureText, getTranslatableText, normalizeWS, shouldTranslateText,
           }
           
           if (!bgColor) {
-            var textColor = window.getComputedStyle(element).color;
+            var textColor = window.getComputedStyle(actualTextElement).color;
             var tcMatch = textColor.match(/\d+/g);
             if (tcMatch && tcMatch.length >= 3) {
               var tr = parseInt(tcMatch[0]), tg = parseInt(tcMatch[1]), tb = parseInt(tcMatch[2]);
