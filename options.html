@@ -259,6 +259,8 @@
 
 
 
+
+
       <!-- 번역문 스타일 커스터마이징 -->
       <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -288,6 +290,35 @@
             블록 배경 투명도:
             <input type="range" id="transBgAlpha" min="0" max="0.5" step="0.01" value="0.12" style="flex: 1; max-width: 200px; accent-color: #818cf8;" />
           </label>
+          <div style="position: relative; width: 100%; margin-top: 4px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #cbd5e1; width: 100%;">
+              <span>번역 가독성 옵션:</span>
+              <div id="inlineOptionsDropdown" style="flex: 1; max-width: 320px; position: relative;">
+                <div id="inlineOptionsToggle" class="text-input" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; font-size: 13px; min-height: 32px; user-select: none;">
+                  <span id="inlineOptionsLabel">선택된 옵션 (1)</span>
+                  <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                </div>
+                <div id="inlineOptionsMenu" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10; padding: 8px; min-width: max-content;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px; border-radius: 4px;">
+                    <input type="checkbox" id="inlineShadow" style="width: 14px; height: 14px; accent-color: #818cf8;" />
+                    텍스트 그림자 (배경 밝기에 따라 Glow 자동 선택)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px; border-radius: 4px;">
+                    <input type="checkbox" id="inlineHighlight" style="width: 14px; height: 14px; accent-color: #818cf8;" />
+                    배경색 강조 (테마 색상)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px; border-radius: 4px;">
+                    <input type="checkbox" id="inlineAdaptiveColor" style="width: 14px; height: 14px; accent-color: #818cf8;" />
+                    글자색 환경 적응 (배경 대비 극대화)
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px; border-radius: 4px;">
+                    <input type="checkbox" id="inlineInheritColor" style="width: 14px; height: 14px; accent-color: #818cf8;" />
+                    원문 글자 색상 (테마 색상 무시)
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 실시간 스타일 미리보기 상자 -->

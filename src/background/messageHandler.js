@@ -1,31 +1,11 @@
 import { handleTranslation, handleWordDictionary } from "./translationService.js";
 import { handleImageTranslation, handleBoundingBoxesLocation, fetchImageAsBase64 } from "./imageService.js";
+import { DEFAULT_SETTINGS } from "../options/storage.js";
 
 export function initializeMessageHandlers() {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.action === "getSettings") {
-      chrome.storage.sync
-        .get({
-          translationMode: "google",
-          geminiApiKey: "",
-          geminiModel: "gemini-3.6-flash",
-          openaiApiKey: "",
-          openaiModel: "gpt-4o-mini",
-          claudeApiKey: "",
-          claudeModel: "claude-3-5-haiku-20241022",
-          ollamaUrl: "http://localhost:11434",
-          ollamaModel: "qwen2.5",
-          ollamaCustomPrompt: "",
-          libreUrl: "http://localhost:5000",
-          targetLang: "ko",
-          displayMode: "dual",
-          lazyTranslate: true,
-          customDict: [],
-          transColor: "#818cf8",
-          transFontSize: "100%",
-          transItalic: false,
-        })
-        .then(sendResponse);
+      chrome.storage.sync.get(DEFAULT_SETTINGS).then(sendResponse);
       return true;
     }
 

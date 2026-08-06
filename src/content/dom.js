@@ -351,6 +351,57 @@ import { checkIsPureText, getTranslatableText, normalizeWS, shouldTranslateText,
         span.textContent = translatedText;
       }
 
+      // 옵션 1: 텍스트 그림자 색상 동적 계산 (원문 글자 색상 기준)
+      if (state.cachedSettings?.inlineShadow) {
+        try {
+          var color = window.getComputedStyle(element).color;
+          var rgbMatch = color.match(/\d+/g);
+          if (rgbMatch && rgbMatch.length >= 3) {
+            var r = parseInt(rgbMatch[0]), g = parseInt(rgbMatch[1]), b = parseInt(rgbMatch[2]);
+            var yiq = (r * 299 + g * 587 + b * 114) / 1000;
+            span.style.setProperty("--wt-inline-glow-color", yiq > 128 ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.9)");
+          }
+        } catch(e) {}
+      }
+
+      // 옵션 3: 환경 적응 색상 (실제 투명하지 않은 가장 가까운 시각적 배경색 탐색)
+      if (state.cachedSettings?.inlineAdaptiveColor) {
+        try {
+          var bgNode = element;
+          var bgColor = null;
+          while (bgNode && bgNode.nodeType === Node.ELEMENT_NODE) {
+            var bg = window.getComputedStyle(bgNode).backgroundColor;
+            var aMatch = bg.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([^)]+)\)/);
+            if (!aMatch || parseFloat(aMatch[1]) > 0.1) {
+              if (bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
+                bgColor = bg;
+                break;
+              }
+            }
+            bgNode = bgNode.parentElement;
+          }
+          
+          if (!bgColor) {
+            var textColor = window.getComputedStyle(element).color;
+            var tcMatch = textColor.match(/\d+/g);
+            if (tcMatch && tcMatch.length >= 3) {
+              var tr = parseInt(tcMatch[0]), tg = parseInt(tcMatch[1]), tb = parseInt(tcMatch[2]);
+              var tYiq = (tr * 299 + tg * 587 + tb * 114) / 1000;
+              bgColor = tYiq > 128 ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)";
+            } else {
+              bgColor = "rgb(255, 255, 255)";
+            }
+          }
+
+          var rgbMatch = bgColor.match(/\d+/g);
+          if (rgbMatch && rgbMatch.length >= 3) {
+            var r = parseInt(rgbMatch[0]), g = parseInt(rgbMatch[1]), b = parseInt(rgbMatch[2]);
+            var yiq = (r * 299 + g * 587 + b * 114) / 1000;
+            span.style.setProperty("--wt-inline-adaptive-color", yiq > 128 ? "#000000" : "#ffffff");
+          }
+        } catch(e) {}
+      }
+
       // 인라인 위치 이탈 수정: <a>/<button>/<label>은 블록 span을 내부 삽입 시
       // 링크/버튼 안으로 들어가 위치 이탈 → 부모의 다음 형제로 삽입
       var isLinkLike = element.tagName === "A" || element.tagName === "BUTTON" || element.tagName === "LABEL";

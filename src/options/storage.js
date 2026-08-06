@@ -19,6 +19,10 @@ export const DEFAULT_SETTINGS = {
   transItalic: false,
   transBgAlpha: 0.12,
   customShortcut: "Alt+A",
+  inlineShadow: false,
+  inlineHighlight: false,
+  inlineAdaptiveColor: false,
+  inlineInheritColor: true,
 };
 
 export function getSettings() {

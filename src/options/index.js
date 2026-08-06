@@ -14,6 +14,26 @@ const targetLangSelect = document.getElementById("targetLang");
 const customShortcutInput = document.getElementById("customShortcut");
 const saveBtn = document.getElementById("saveBtn");
 const lazyTranslateInput = document.getElementById("lazyTranslate");
+const inlineShadowInput = document.getElementById("inlineShadow");
+const inlineHighlightInput = document.getElementById("inlineHighlight");
+const inlineAdaptiveColorInput = document.getElementById("inlineAdaptiveColor");
+const inlineInheritColorInput = document.getElementById("inlineInheritColor");
+const inlineOptionsToggle = document.getElementById("inlineOptionsToggle");
+const inlineOptionsMenu = document.getElementById("inlineOptionsMenu");
+const inlineOptionsLabel = document.getElementById("inlineOptionsLabel");
+
+function updateInlineOptionsLabel() {
+  if (!inlineOptionsLabel) return;
+  let count = 0;
+  if (inlineShadowInput && inlineShadowInput.checked) count++;
+  if (inlineHighlightInput && inlineHighlightInput.checked) count++;
+  if (inlineAdaptiveColorInput && inlineAdaptiveColorInput.checked) count++;
+  if (inlineInheritColorInput && inlineInheritColorInput.checked) count++;
+  
+  if (count === 0) inlineOptionsLabel.textContent = "선택 없음";
+  else inlineOptionsLabel.textContent = `선택된 옵션 (${count})`;
+}
+
 const loadModelsBtn = document.getElementById("loadModelsBtn");
 const loadModelsHint = document.getElementById("loadModelsHint");
 const geminiModelList = document.getElementById("geminiModelList");
@@ -69,8 +89,12 @@ async function initialize() {
   if (targetLangSelect) targetLangSelect.value = settings.targetLang;
   if (customShortcutInput) customShortcutInput.value = settings.customShortcut || "Alt+A";
 
-  // 지연 번역
+  // 지연 번역 및 인라인 가독성 옵션
   if (lazyTranslateInput) lazyTranslateInput.checked = settings.lazyTranslate;
+  if (inlineShadowInput) inlineShadowInput.checked = settings.inlineShadow || false;
+  if (inlineHighlightInput) inlineHighlightInput.checked = settings.inlineHighlight || false;
+  if (inlineAdaptiveColorInput) inlineAdaptiveColorInput.checked = settings.inlineAdaptiveColor || false;
+  if (inlineInheritColorInput) inlineInheritColorInput.checked = settings.inlineInheritColor || false;
 
   // 번역 스타일 설정
   if (transColorInput) transColorInput.value = settings.transColor || "#818cf8";
@@ -78,6 +102,7 @@ async function initialize() {
   if (transItalicInput) transItalicInput.checked = settings.transItalic || false;
   if (transBgAlphaInput) transBgAlphaInput.value = settings.transBgAlpha !== undefined ? settings.transBgAlpha : 0.12;
   updateStylePreview();
+  updateInlineOptionsLabel();
   
   // 사용자 사전
   setCustomDict(settings.customDict || []);
@@ -176,6 +201,26 @@ if (transFontSizeSelect) transFontSizeSelect.addEventListener("change", updateSt
 if (transItalicInput) transItalicInput.addEventListener("change", updateStylePreview);
 if (transBgAlphaInput) transBgAlphaInput.addEventListener("input", updateStylePreview);
 
+if (inlineOptionsToggle && inlineOptionsMenu) {
+  inlineOptionsToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isVisible = inlineOptionsMenu.style.display === "block";
+    inlineOptionsMenu.style.display = isVisible ? "none" : "block";
+  });
+  
+  document.addEventListener("click", (e) => {
+    if (!inlineOptionsToggle.contains(e.target) && !inlineOptionsMenu.contains(e.target)) {
+      inlineOptionsMenu.style.display = "none";
+    }
+  });
+}
+
+const handleInlineChange = () => { updateStylePreview(); updateInlineOptionsLabel(); };
+if (inlineShadowInput) inlineShadowInput.addEventListener("change", handleInlineChange);
+if (inlineHighlightInput) inlineHighlightInput.addEventListener("change", handleInlineChange);
+if (inlineAdaptiveColorInput) inlineAdaptiveColorInput.addEventListener("change", handleInlineChange);
+if (inlineInheritColorInput) inlineInheritColorInput.addEventListener("change", handleInlineChange);
+
 modeRadios.forEach((radio) => {
   radio.addEventListener("change", (e) => {
     updateUI(e.target.value);
@@ -217,7 +262,12 @@ if (resetStyleBtn) {
     if (transFontSizeSelect) transFontSizeSelect.value = "100%";
     if (transItalicInput) transItalicInput.checked = false;
     if (transBgAlphaInput) transBgAlphaInput.value = "0.12";
+    if (inlineShadowInput) inlineShadowInput.checked = false;
+    if (inlineHighlightInput) inlineHighlightInput.checked = false;
+    if (inlineAdaptiveColorInput) inlineAdaptiveColorInput.checked = false;
+    if (inlineInheritColorInput) inlineInheritColorInput.checked = true;
     updateStylePreview();
+    updateInlineOptionsLabel();
 
     try {
       await saveSettings({
@@ -225,6 +275,10 @@ if (resetStyleBtn) {
         transFontSize: "100%",
         transItalic: false,
         transBgAlpha: 0.12,
+        inlineShadow: false,
+        inlineHighlight: false,
+        inlineAdaptiveColor: false,
+        inlineInheritColor: true,
       });
       showSaveStatus("✓ 번역문 스타일이 기본값으로 초기화되었습니다.", "success");
     } catch(err) {
@@ -289,6 +343,10 @@ if (saveBtn) {
       customShortcut: customShortcutInput ? customShortcutInput.value : "Alt+A",
       displayMode: display,
       lazyTranslate: lazyTranslateInput ? lazyTranslateInput.checked : true,
+      inlineShadow: inlineShadowInput ? inlineShadowInput.checked : false,
+      inlineHighlight: inlineHighlightInput ? inlineHighlightInput.checked : false,
+      inlineAdaptiveColor: inlineAdaptiveColorInput ? inlineAdaptiveColorInput.checked : false,
+      inlineInheritColor: inlineInheritColorInput ? inlineInheritColorInput.checked : false,
       customDict: getCustomDict(),
       transColor: transColorInput ? transColorInput.value : "#818cf8",
       transFontSize: transFontSizeSelect ? transFontSizeSelect.value : "100%",

@@ -17,32 +17,65 @@ import { state } from "./state.js";
     var b = num & 255;
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
-  export function getAutoTextColor(hex) {
-    if (!hex || typeof hex !== "string") return "#818cf8";
+  export function getAutoTextColor(hex, bgAlpha = 0) {
+    if (!hex || typeof hex !== "string") hex = "#818cf8";
     var cleanHex = hex.replace("#", "");
     if (cleanHex.length === 3) cleanHex = cleanHex.split("").map((c) => c + c).join("");
     var r = parseInt(cleanHex.substring(0, 2), 16);
     var g = parseInt(cleanHex.substring(2, 4), 16);
     var b = parseInt(cleanHex.substring(4, 6), 16);
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return "#818cf8";
+    if (isNaN(r) || isNaN(g) || isNaN(b)) { r = 129; g = 140; b = 248; }
 
     var yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-    if (yiq > 200) return "#1e293b"; // 아주 밝은 색일 경우 어두운 글자
-    if (yiq < 60) return "#f8fafc";  // 아주 어두운 색일 경우 밝은 글자
-    return hex; // 중간 밝기는 테마색 유지
+    
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    h = Math.round(h * 360);
+    s = Math.round(s * 100);
+    var origL = Math.round(l * 100);
+
+    // 배경색의 밝기에 따라 목표 명도(targetL) 설정
+    var targetL = yiq > 128 ? Math.max(15, origL - 60) : Math.min(95, origL + 60);
+    
+    // bgAlpha(0~1)에 따라 원래 명도에서 목표 명도로 보간
+    var intensity = Math.min(1, bgAlpha * 1.5);
+    var finalL = origL + (targetL - origL) * intensity;
+    
+    finalL = Math.round(Math.max(10, Math.min(95, finalL)));
+    return `hsl(${h}, ${s}%, ${finalL}%)`;
   }
 
   export function updateCustomStyles(settings) {
     if (!settings) return;
     var root = document.documentElement;
     var themeColor = settings.transColor || "#818cf8";
-    var textColor = getAutoTextColor(themeColor);
     var bgAlpha = settings.transBgAlpha !== undefined ? settings.transBgAlpha : 0.12;
+    var textColor = getAutoTextColor(themeColor, bgAlpha);
 
     root.style.setProperty("--wt-theme-color", themeColor);
     root.style.setProperty("--wt-text-color", textColor);
     root.style.setProperty("--wt-trans-bg", hexToRgba(themeColor, bgAlpha));
     root.style.setProperty("--wt-trans-border", hexToRgba(themeColor, 0.45));
+
+    var glowColor = "rgba(255,255,255,0.9)";
+    var match = textColor.match(/hsl\(\d+,\s*\d+%,\s*(\d+)%\)/);
+    if (match) {
+      if (parseInt(match[1]) > 50) glowColor = "rgba(0,0,0,0.85)";
+    }
+    root.style.setProperty("--wt-inline-glow-color", glowColor);
 
     if (settings.transFontSize) {
       root.style.setProperty("--wt-trans-font-size", settings.transFontSize);
@@ -50,6 +83,18 @@ import { state } from "./state.js";
     if (settings.transItalic !== undefined) {
       root.style.setProperty("--wt-trans-font-style", settings.transItalic ? "italic" : "normal");
     }
+
+    if (settings.inlineShadow) root.setAttribute("data-wt-inline-shadow", "true");
+    else root.removeAttribute("data-wt-inline-shadow");
+
+    if (settings.inlineHighlight) root.setAttribute("data-wt-inline-highlight", "true");
+    else root.removeAttribute("data-wt-inline-highlight");
+
+    if (settings.inlineAdaptiveColor) root.setAttribute("data-wt-inline-adaptive", "true");
+    else root.removeAttribute("data-wt-inline-adaptive");
+
+    if (settings.inlineInheritColor) root.setAttribute("data-wt-inline-inherit", "true");
+    else root.removeAttribute("data-wt-inline-inherit");
   }
 
   /* ────────────────────────────────────────────

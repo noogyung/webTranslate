@@ -63,6 +63,36 @@ br.wt-dual-br { display: none; }
   }
 }
 
+/* ── 인라인 가독성 옵션 (Inline Legibility Options) ────────────── */
+
+/* 옵션 1. 텍스트 이중 그림자 (글로우 효과) */
+html[data-wt-inline-shadow="true"] .wt-translation,
+html[data-wt-inline-shadow="true"] [class*="wt-dual-"] {
+  text-shadow: 0 1px 2px var(--wt-inline-glow-color, rgba(255,255,255,0.8)),
+               0 0 3px var(--wt-inline-glow-color, rgba(255,255,255,0.8));
+}
+
+/* 옵션 2. 미세한 인라인 전용 배경 */
+html[data-wt-inline-highlight="true"] .wt-translation.wt-inline,
+html[data-wt-inline-highlight="true"] .wt-dual-inline {
+  background-color: var(--wt-trans-bg) !important;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+/* 옵션 4. 원문 글자 색상 따라가기 */
+html[data-wt-inline-inherit="true"]:not([data-wt-inline-adaptive="true"]) .wt-translation,
+html[data-wt-inline-inherit="true"]:not([data-wt-inline-adaptive="true"]) [class*="wt-dual-"] {
+  color: inherit !important;
+}
+
+/* 옵션 3. 환경 적응 인라인 글자 색상 (JS에서 배경색을 추적해 대비 계산) */
+/* (옵션 4보다 우선 적용되도록 CSS 후순위 배치 및 not 선택자로 충돌 방지) */
+html[data-wt-inline-adaptive="true"] .wt-translation,
+html[data-wt-inline-adaptive="true"] [class*="wt-dual-"] {
+  color: var(--wt-inline-adaptive-color, #000) !important;
+}
+
 /* ── Replace 모드: 교체된 요소 (시각적 표시 없음) ─────────────── */
 
 [data-wt-translated="replaced"] {

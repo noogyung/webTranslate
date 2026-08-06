@@ -9,17 +9,17 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
     let styleChanged = false;
     for (let [key, { newValue }] of Object.entries(changes)) {
-      if (state.settings) {
-        state.settings[key] = newValue;
+      if (state.cachedSettings) {
+        state.cachedSettings[key] = newValue;
       }
-      if (['transColor', 'transBgAlpha', 'transFontSize', 'transItalic'].includes(key)) {
+      if (['transColor', 'transBgAlpha', 'transFontSize', 'transItalic', 'inlineShadow', 'inlineHighlight', 'inlineAdaptiveColor', 'inlineInheritColor'].includes(key)) {
         styleChanged = true;
       }
     }
     // 색상 등 스타일 관련 값이 변했다면 화면 내 블록들 즉시 업데이트
-    if (styleChanged && state.settings) {
+    if (styleChanged && state.cachedSettings) {
       import("./ui.js").then((ui) => {
-        ui.updateCustomStyles(state.settings);
+        ui.updateCustomStyles(state.cachedSettings);
       });
     }
   }
@@ -39,10 +39,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (message.action === "toggleTranslation") {
       handleToggleTranslation();
     } else if (message.action === "updateStylePreview") {
-      if (state.settings) {
-        state.settings[message.key] = message.value;
+      if (state.cachedSettings) {
+        state.cachedSettings[message.key] = message.value;
         import("./ui.js").then((ui) => {
-          ui.updateCustomStyles(state.settings);
+          ui.updateCustomStyles(state.cachedSettings);
         });
       }
     }
