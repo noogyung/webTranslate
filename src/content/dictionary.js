@@ -190,7 +190,6 @@ import { isAlreadyTargetLang } from "./utils.js";
           ollamaModel: settings.ollamaModel,
           libreUrl: settings.libreUrl,
           isPopup: true,
-          showPhonetics: settings.showPhonetics !== false,
           phoneticLanguage: settings.phoneticLanguage || "IPA",
         });
         var translated = result?.translations?.[0];

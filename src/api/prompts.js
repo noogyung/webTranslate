@@ -5,12 +5,7 @@ export function buildTranslationPrompt(langName, engineType, customPrompt = "", 
     if (customPrompt && customPrompt.trim() !== "") {
       prompt += `ADDITIONAL INSTRUCTIONS:\n${customPrompt.trim()}\n\n`;
     }
-    if (options.isPopup && options.showPhonetics) {
-      let phLang = `How to read the original text in ${langName} pronunciation`;
-      prompt += `CRITICAL: Return ONLY a JSON object formatted exactly as: {"translations": ["translated_1", "translated_2"], "phonetics": ["${phLang}"]}`;
-    } else {
-      prompt += `CRITICAL: Return ONLY a JSON object formatted exactly as: {"translations": ["translated_1", "translated_2"]}`;
-    }
+    prompt += `CRITICAL: Return ONLY a JSON object formatted exactly as: {"translations": ["translated_1", "translated_2"]}`;
     return prompt;
   }
 
@@ -18,6 +13,8 @@ export function buildTranslationPrompt(langName, engineType, customPrompt = "", 
     `You are a professional comic, manga, and website translator into natural, fluent ${langName}.\n` +
     `CRITICAL TRANSLATION RULES:\n` +
     `- Translate all dialogue, narration, and text accurately and naturally into fluent ${langName}.\n` +
+    `- The input array may contain a mix of different source languages (e.g., English, Chinese, Japanese, Russian). You MUST detect the source language of EACH item individually and translate ALL of them into ${langName}.\n` +
+    `- NEVER skip any item. Every single string in the input array MUST be translated. Do NOT return empty strings or copy the original text verbatim unless it is a proper noun.\n` +
     `- Transliterate character names and surnames accurately according to standard pronunciation in ${langName}.\n` +
     `- Maintain consistent terminology, dialogue relationships, and natural spoken tone appropriate for the context.\n` +
     `- Preserve original punctuation, whitespace, and numbers.\n`;
@@ -27,38 +24,18 @@ export function buildTranslationPrompt(langName, engineType, customPrompt = "", 
   }
 
   let formatRules = "";
-  let phoneticRule = "";
   
-  if (options.isPopup && options.showPhonetics) {
-    let phLang = `How to read the original text using ${langName} characters (transliteration/pronunciation)`;
-    phoneticRule = `- Also provide the phonetic reading of the ORIGINAL text. Format it in ${phLang}.\n`;
-  }
-
   if (engineType === "gemini") {
-    if (options.isPopup && options.showPhonetics) {
-      formatRules = `- Return ONLY a JSON object with "translations" array and "phonetics" array. No markdown wrapper, no explanation.`;
-    } else {
-      formatRules = `- Return ONLY a JSON array of strings (same length as input). No markdown wrapper, no explanation.`;
-    }
+    formatRules = `- Return ONLY a JSON array of strings (same length as input). No markdown wrapper, no explanation.`;
   } else if (engineType === "openai") {
-    if (options.isPopup && options.showPhonetics) {
-      formatRules = `- Maintain EXACT 1-to-1 array order and length.\n` +
-                    `- Return ONLY a valid JSON object with the keys "translations" (array of translated strings) and "phonetics" (array of phonetic strings). Do NOT add explanation, markdown formatting, or notes.`;
-    } else {
-      formatRules = `- Maintain EXACT 1-to-1 array order and length.\n` +
-                    `- Return ONLY a valid JSON object with the key "translations" mapped to an array of translated strings. Do NOT add explanation, markdown formatting, or notes.`;
-    }
+    formatRules = `- Maintain EXACT 1-to-1 array order and length.\n` +
+                  `- Return ONLY a valid JSON object with the key "translations" mapped to an array of translated strings. Do NOT add explanation, markdown formatting, or notes.`;
   } else if (engineType === "claude") {
-    if (options.isPopup && options.showPhonetics) {
-      formatRules = `- Return ONLY a JSON object with keys "translations" and "phonetics" containing arrays of strings in exact order. No markdown wrapper, no conversational text.\n` +
-                    `Example: {"translations": ["번역문1"], "phonetics": ["phonetic1"]}`;
-    } else {
-      formatRules = `- Return ONLY a JSON object with key "translations" containing an array of strings in exact order. No markdown wrapper, no conversational text.\n` +
-                    `Example: {"translations": ["번역문1", "번역문2"]}`;
-    }
+    formatRules = `- Return ONLY a JSON object with key "translations" containing an array of strings in exact order. No markdown wrapper, no conversational text.\n` +
+                  `Example: {"translations": ["번역문1", "번역문2"]}`;
   }
 
-  return baseRules + phoneticRule + formatRules;
+  return baseRules + formatRules;
 }
 
 export function buildDictionaryPrompt(word, langName) {

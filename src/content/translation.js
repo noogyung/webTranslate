@@ -57,31 +57,42 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
         });
       }
 
+      state.isTranslated = true;
+      state.isTranslating = false; // 옵저버가 새 요소를 감지할 수 있도록 즉시 해제
+      startObserver(); // 동적 콘텐츠 감시 즉시 시작
+
       // 2. 보이지 않는 부분 후속 번역 (지연 옵션 분기)
       if (hiddenBlocks.length > 0) {
         if (settings.lazyTranslate) {
           setupLazyObserver(hiddenBlocks);
+          showStatus("번역 완료!", "done", 2500);
         } else {
-          await translateBlocks(hiddenBlocks, settings, (done) => {
-            completed = visibleBlocks.length + done;
-            updateStatus(`번역 중… (${completed}/${total})`, completed / total);
+          // 전체 번역 모드일 경우 백그라운드에서 비동기로 이어서 번역 (무한 스크롤 등 동적 콘텐츠 감지와 병렬 처리)
+          translateBlocks(hiddenBlocks, settings, (done) => {
+            var curr = visibleBlocks.length + done;
+            updateStatus(`전체 번역 중… (${curr}/${total})`, curr / total);
+          }).then(() => {
+            if (state.isTranslated) showStatus("번역 완료!", "done", 2500);
+          }).catch(err => {
+            console.warn("[WebTranslator] 백그라운드 번역 오류", err);
           });
         }
+      } else {
+        showStatus("번역 완료!", "done", 2500);
       }
-
-      state.isTranslated = true;
-      showStatus("번역 완료!", "done", 2500);
-
-      // 동적 콘텐츠 감시 시작
-      startObserver();
     } catch (err) {
-      showStatus(`오류: ${err.message}`, "error", 5000);
-    } finally {
       state.isTranslating = false;
+      showStatus(`오류: ${err.message}`, "error", 5000);
     }
   }
 
-  export function getBatchConfig(mode) {
+  export function getBatchConfig(mode, isBatchMode = false) {
+    if (isBatchMode) {
+      // 일괄 번역: 한 번에 너무 많이 보내면(150개) Gemini가 번역을 누락하거나 빈 문자열을 반환하는 품질 저하가 발생함.
+      // 번역 퀄리티가 유지되는 최대 안전선(40개)으로 줄이고, 직렬로 전송.
+      return { batchSize: 40, concurrency: 1 };
+    }
+
     if (mode === "gemini" || mode === "openai" || mode === "claude") {
       return { batchSize: 12, concurrency: 3 };
     }
@@ -140,7 +151,9 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
     if (unCachedBlocks.length === 0) return;
 
     // 2. 캐시 미적중 분량 API 요청 (엔진별 전략 적용)
-    var { batchSize, concurrency } = getBatchConfig(settings.translationMode);
+    // 지연 번역을 껐을 때 대량의 요소가 들어오면 일괄 번역 모드로 처리하여 API 다중 호출을 방지함
+    var isBatchMode = !settings.lazyTranslate && unCachedBlocks.length > 30;
+    var { batchSize, concurrency } = getBatchConfig(settings.translationMode, isBatchMode);
 
     var batches = [];
     for (let i = 0; i < unCachedBlocks.length; i += batchSize) {
@@ -151,8 +164,16 @@ import { normalizeDateTimes, needsRemoteTranslation } from "./utils.js";
 
     async function worker() {
       while (currentIndex < batches.length) {
+        // 번역이 취소(revert)되면 두 플래그 모두 false가 됨
+        if (!state.isTranslated && !state.isTranslating) break; 
         var batchIdx = currentIndex++;
         var batch = batches[batchIdx];
+
+        // API Rate Limit 방지를 위한 딜레이 (일괄 번역 모드 시)
+        if (isBatchMode && batchIdx > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
         // [P1 FIX #8] 최소 개입: 구조적 오류(연도+시각 붙음)만 분리
         var texts = batch.map((b) => normalizeDateTimes(b.text));
 

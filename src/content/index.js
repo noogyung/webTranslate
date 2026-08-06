@@ -3,6 +3,29 @@ import { startTranslation, revertTranslation } from "./translation.js";
 import "./dictionary.js";
 
 /* ────────────────────────────────────────────
+   * 설정 실시간 업데이트 리스너 (팝업 메뉴용)
+   * ──────────────────────────────────────────── */
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync") {
+    let styleChanged = false;
+    for (let [key, { newValue }] of Object.entries(changes)) {
+      if (state.settings) {
+        state.settings[key] = newValue;
+      }
+      if (['transColor', 'transBgAlpha', 'transFontSize', 'transItalic'].includes(key)) {
+        styleChanged = true;
+      }
+    }
+    // 색상 등 스타일 관련 값이 변했다면 화면 내 블록들 즉시 업데이트
+    if (styleChanged && state.settings) {
+      import("./ui.js").then((ui) => {
+        ui.updateCustomStyles(state.settings);
+      });
+    }
+  }
+});
+
+/* ────────────────────────────────────────────
    * 메시지 리스너
    * ──────────────────────────────────────────── */
 
@@ -15,6 +38,13 @@ import "./dictionary.js";
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === "toggleTranslation") {
       handleToggleTranslation();
+    } else if (message.action === "updateStylePreview") {
+      if (state.settings) {
+        state.settings[message.key] = message.value;
+        import("./ui.js").then((ui) => {
+          ui.updateCustomStyles(state.settings);
+        });
+      }
     }
   });
 

@@ -11,7 +11,7 @@ import { showStatus } from "./ui.js";
     if (state.observer) state.observer.disconnect();
 
     state.observer = new MutationObserver((mutations) => {
-      if (state.isTranslating || state.isObserverBusy || !state.isTranslated) return;
+      if (!state.isTranslated) return;
 
       for (const mutation of mutations) {
         if (mutation.type !== "childList") continue;
@@ -62,7 +62,7 @@ import { showStatus } from "./ui.js";
   }
 
   export async function translateNewNodes(nodes) {
-    if (!state.cachedSettings || state.isObserverBusy) return;
+    if (!state.cachedSettings) return;
 
     var allBlocks = [];
     for (const node of nodes) {
@@ -80,47 +80,27 @@ import { showStatus } from "./ui.js";
         else hiddenBlocks.push(b);
       }
 
-      // 1. 가시 영역 블록 → 즉시 번역
+      // 1. 가시 영역 블록 → 백그라운드 번역
       if (visibleBlocks.length > 0) {
-        state.isObserverBusy = true;
-        if (state.observer) state.observer.disconnect();
         showStatus("새로운 텍스트 번역 중…", "loading");
-
-        try {
-          await translateBlocks(visibleBlocks, state.cachedSettings);
-          showStatus("번역 업데이트 완료", "done", 2000);
-        } catch (err) {
+        translateBlocks(visibleBlocks, state.cachedSettings).then(() => {
+          if (state.isTranslated) showStatus("번역 업데이트 완료", "done", 2000);
+        }).catch(err => {
           console.warn("[WebTranslator] 동적 번역 오류:", err);
-          showStatus("동적 번역 오류", "error", 3000);
-        } finally {
-          state.isObserverBusy = false;
-          if (state.isTranslated && state.observer) {
-            state.observer.observe(document.body, { childList: true, subtree: true });
-          }
-        }
+        });
       }
 
-      // 2. 비가시 영역 블록 → 지연 또는 즉시
+      // 2. 비가시 영역 블록 → 지연 또는 백그라운드 즉시 번역
       if (hiddenBlocks.length > 0) {
         if (state.cachedSettings.lazyTranslate) {
           setupLazyObserver(hiddenBlocks);
         } else {
-          state.isObserverBusy = true;
-          if (state.observer) state.observer.disconnect();
           showStatus("보이지 않는 영역 동적 번역 중…", "loading");
-
-          try {
-            await translateBlocks(hiddenBlocks, state.cachedSettings);
-            showStatus("번역 업데이트 완료", "done", 2000);
-          } catch (err) {
+          translateBlocks(hiddenBlocks, state.cachedSettings).then(() => {
+            if (state.isTranslated) showStatus("번역 업데이트 완료", "done", 2000);
+          }).catch(err => {
             console.warn("[WebTranslator] 동적 지연 번역 오류:", err);
-            showStatus("동적 번역 오류", "error", 3000);
-          } finally {
-            state.isObserverBusy = false;
-            if (state.isTranslated && state.observer) {
-              state.observer.observe(document.body, { childList: true, subtree: true });
-            }
-          }
+          });
         }
       }
     }

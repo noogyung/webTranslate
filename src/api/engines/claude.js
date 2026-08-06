@@ -39,13 +39,6 @@ export async function translateWithClaude(texts, targetLang, apiKey, modelName, 
   const parsed = JSON.parse(cleanJsonStr);
   if (!Array.isArray(parsed.translations)) throw new Error("Claude 번역 결과 형식이 올바르지 않습니다.");
   
-  if (options.isPopup && options.showPhonetics) {
-    return {
-      translations: parsed.translations,
-      phonetics: Array.isArray(parsed.phonetics) ? parsed.phonetics : null,
-    };
-  }
-  
   return parsed.translations;
 }
 

@@ -28,14 +28,14 @@ export async function translateWithOllama(texts, targetLang, ollamaUrl, modelNam
   if (!data.response) throw new Error("Ollama 응답이 비어있습니다.");
 
   const parsed = JSON.parse(data.response);
-  if (!Array.isArray(parsed.translations)) throw new Error("Ollama 번역 결과 형식이 올바르지 않습니다.");
-  
-  if (options.isPopup && options.showPhonetics) {
-    return {
-      translations: parsed.translations,
-      phonetics: Array.isArray(parsed.phonetics) ? parsed.phonetics : null,
-    };
+  let translations;
+  if (Array.isArray(parsed)) {
+    translations = parsed;
+  } else if (parsed.translations && Array.isArray(parsed.translations)) {
+    translations = parsed.translations;
+  } else {
+    throw new Error("Ollama 응답 형식이 올바르지 않습니다.");
   }
-  
-  return parsed.translations;
+
+  return translations;
 }

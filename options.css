@@ -444,10 +444,6 @@ body::before {
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-}
-
 /* ── Excel Dict Modal ────────────────────────────────────────────── */
 
 .dict-modal-overlay {

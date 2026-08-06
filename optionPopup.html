@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>빠른 설정</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="optionPopup.css" />
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+          <path d="M5 8l6 6"/>
+          <path d="M4 14l6-6 2-3"/>
+          <path d="M2 5h12"/>
+          <path d="M7 2h1"/>
+          <path d="m22 22-5-10-5 10"/>
+          <path d="M14 18h6"/>
+        </svg>
+      </div>
+      <h1>빠른 설정</h1>
+    </header>
+
+    <div class="popup-section">
+      <div class="control-group">
+        <label>목표 언어</label>
+        <select id="targetLang" class="styled-select">
+          <option value="ko">🇰🇷 한국어 (Korean)</option>
+          <option value="en">🇺🇸 영어 (English)</option>
+          <option value="ja">🇯🇵 일본어 (Japanese)</option>
+          <option value="zh-CN">🇨🇳 중국어 간체 (Simplified Chinese)</option>
+          <option value="zh-TW">🇹🇼 중국어 번체 (Traditional Chinese)</option>
+          <option value="es">🇪🇸 스페인어 (Spanish)</option>
+          <option value="fr">🇫🇷 프랑스어 (French)</option>
+          <option value="de">🇩🇪 독일어 (German)</option>
+          <option value="pt">🇧🇷 포르투갈어 (Portuguese)</option>
+          <option value="ru">🇷🇺 러시아어 (Russian)</option>
+          <option value="ar">🇸🇦 아랍어 (Arabic)</option>
+          <option value="hi">🇮🇳 힌디어 (Hindi)</option>
+          <option value="vi">🇻🇳 베트남어 (Vietnamese)</option>
+          <option value="th">🇹🇭 태국어 (Thai)</option>
+          <option value="id">🇮🇩 인도네시아어 (Indonesian)</option>
+          <option value="it">🇮🇹 이탈리아어 (Italian)</option>
+          <option value="nl">🇳🇱 네덜란드어 (Dutch)</option>
+          <option value="tr">🇹🇷 터키어 (Turkish)</option>
+          <option value="pl">🇵🇱 폴란드어 (Polish)</option>
+          <option value="sv">🇸🇪 스웨덴어 (Swedish)</option>
+          <option value="uk">🇺🇦 우크라이나어 (Ukrainian)</option>
+          <option value="cs">🇨🇿 체코어 (Czech)</option>
+          <option value="el">🇬🇷 그리스어 (Greek)</option>
+          <option value="he">🇮🇱 히브리어 (Hebrew)</option>
+          <option value="ro">🇷🇴 루마니아어 (Romanian)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>표시 방식</label>
+        <select id="displayMode" class="styled-select">
+          <option value="dual">원문 유지 + 번역</option>
+          <option value="replace">원문 숨김 + 번역</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="popup-section toggles">
+      <label class="toggle-row">
+        <span>화면 내 텍스트 지연 번역</span>
+        <div class="toggle-switch">
+          <input type="checkbox" id="lazyTranslate" />
+          <div class="slider"></div>
+        </div>
+      </label>
+    </div>
+
+    <div class="popup-section">
+      <h3>번역 테마 스타일</h3>
+      
+      <div class="style-row">
+        <label>테마 색상</label>
+        <div class="color-picker-wrapper">
+          <input type="color" id="transColor" value="#818cf8" />
+        </div>
+      </div>
+
+      <div class="style-row">
+        <label>블록 투명도</label>
+        <input type="range" id="transBgAlpha" min="0" max="1" step="0.05" value="0.12" class="styled-range" />
+      </div>
+
+      <div class="style-row">
+        <label>글자 크기</label>
+        <select id="transFontSize" class="styled-select">
+          <option value="85%">작게 (85%)</option>
+          <option value="100%">기통 (100%)</option>
+          <option value="115%">크게 (115%)</option>
+          <option value="130%">아주 크게 (130%)</option>
+        </select>
+      </div>
+
+      <label class="toggle-row">
+        <span>기울임꼴 적용 (Italic)</span>
+        <div class="toggle-switch">
+          <input type="checkbox" id="transItalic" />
+          <div class="slider"></div>
+        </div>
+      </label>
+    </div>
+
+    <button id="openOptionsBtn" class="primary-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right: 6px;">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      상세 설정 열기
+    </button>
+  </div>
+  <script type="module" src="src/optionPopup/index.js"></script>
+</body>
+</html>

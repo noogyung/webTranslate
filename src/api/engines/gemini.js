@@ -65,10 +65,6 @@ export async function translateWithGemini(texts, targetLang, apiKey, modelName =
     }
     const response = await _geminiRequestWithRetry(batch.texts, langName, apiKey, activeModel, 0, new Set(), options);
     
-    if (options.isPopup && options.showPhonetics) {
-      return response;
-    }
-
     response.forEach((t, j) => {
       results[batch.startIdx + j] = t;
     });
@@ -161,14 +157,6 @@ async function _geminiRequest(texts, langName, url, options = {}) {
     translations = JSON.parse(rawText);
   } catch {
     throw new Error("Gemini 응답을 JSON으로 파싱할 수 없습니다.");
-  }
-
-  if (options.isPopup && options.showPhonetics) {
-    if (!Array.isArray(translations.translations)) throw new Error("Gemini 응답이 유효한 JSON 형식이 아닙니다 (translations 키 없음).");
-    return {
-      translations: translations.translations,
-      phonetics: Array.isArray(translations.phonetics) ? translations.phonetics : null,
-    };
   }
 
   if (!Array.isArray(translations)) {

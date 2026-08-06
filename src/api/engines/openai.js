@@ -75,13 +75,6 @@ export async function translateWithOpenAI(texts, targetLang, apiKey, modelName, 
   const parsed = JSON.parse(rawText);
   if (!Array.isArray(parsed.translations)) throw new Error("OpenAI 번역 결과 형식이 올바르지 않습니다.");
   
-  if (options.isPopup && options.showPhonetics) {
-    return {
-      translations: parsed.translations,
-      phonetics: Array.isArray(parsed.phonetics) ? parsed.phonetics : null,
-    };
-  }
-  
   return parsed.translations;
 }
 
