@@ -438,8 +438,32 @@ import { checkIsPureText, getTranslatableText, normalizeWS, shouldTranslateText,
           var rgbMatch = bgColor.match(/\d+/g);
           if (rgbMatch && rgbMatch.length >= 3) {
             var r = parseInt(rgbMatch[0]), g = parseInt(rgbMatch[1]), b = parseInt(rgbMatch[2]);
+            
+            // 단순 흑백이 아닌 실제 배경색의 반전 색상(보색)을 계산
+            var invR = 255 - r;
+            var invG = 255 - g;
+            var invB = 255 - b;
+            
             var yiq = (r * 299 + g * 587 + b * 114) / 1000;
-            span.style.setProperty("--wt-inline-adaptive-color", yiq > 128 ? "#000000" : "#ffffff");
+            var invYiq = (invR * 299 + invG * 587 + invB * 114) / 1000;
+            
+            // 배경색이 중간 회색(mid-gray)에 가까워 반전 색상과의 명도 차이가 적을 경우 가독성을 위해 명도 강제 보정
+            if (Math.abs(yiq - invYiq) < 60) {
+              var pushAmt = 60;
+              if (yiq > 128) {
+                // 배경이 약간 밝은 회색이면 반전 글자를 더 어둡게
+                invR = Math.max(0, invR - pushAmt);
+                invG = Math.max(0, invG - pushAmt);
+                invB = Math.max(0, invB - pushAmt);
+              } else {
+                // 배경이 약간 어두운 회색이면 반전 글자를 더 밝게
+                invR = Math.min(255, invR + pushAmt);
+                invG = Math.min(255, invG + pushAmt);
+                invB = Math.min(255, invB + pushAmt);
+              }
+            }
+            
+            span.style.setProperty("--wt-inline-adaptive-color", `rgb(${invR}, ${invG}, ${invB})`);
           }
         } catch(e) {}
       }
