@@ -404,13 +404,21 @@ import { checkIsPureText, getTranslatableText, normalizeWS, shouldTranslateText,
           var bgNode = actualTextElement;
           var bgColor = null;
           while (bgNode && bgNode.nodeType === Node.ELEMENT_NODE) {
-            var bg = window.getComputedStyle(bgNode).backgroundColor;
+            var computedBg = window.getComputedStyle(bgNode);
+            var bg = computedBg.backgroundColor;
+            var bgImg = computedBg.backgroundImage;
             var aMatch = bg.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([^)]+)\)/);
+            
             if (!aMatch || parseFloat(aMatch[1]) > 0.1) {
               if (bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
                 bgColor = bg;
                 break;
               }
+            }
+            // 만약 배경색은 투명하지만 background-image(그라데이션 등)가 존재한다면
+            // 부모의 배경색을 가져오면 잘못된 대비가 계산될 수 있으므로 탐색을 중단합니다.
+            if (bgImg && bgImg !== "none" && bgImg !== "initial") {
+              break;
             }
             bgNode = bgNode.parentElement;
           }
