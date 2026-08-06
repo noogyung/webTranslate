@@ -22,7 +22,6 @@ export async function handleTranslation({
   ollamaModel,
   ollamaCustomPrompt,
   libreUrl,
-  translateAsReplace,
   targetLanguage,
 }) {
   const startTime = performance.now();
@@ -31,8 +30,7 @@ export async function handleTranslation({
   console.groupEnd();
 
   let translations;
-  const isPopup = !translateAsReplace;
-  const apiOptions = { isPopup };
+  const apiOptions = {};
 
   try {
     let result;
@@ -50,18 +48,27 @@ export async function handleTranslation({
       result = await translateWithGoogle(texts, targetLang, apiOptions);
     }
 
-    translations = result;
+    let phonetics = [];
+    if (Array.isArray(result)) {
+      translations = result;
+    } else if (result && result.translations) {
+      translations = result.translations;
+      phonetics = result.phonetics || [];
+    } else {
+      translations = [];
+    }
     const duration = Math.round(performance.now() - startTime);
 
     console.group(`[WebTranslator DEBUG] [Engine: ${mode.toUpperCase()}] 번역 응답 수신 (소요시간: ${duration}ms)`);
     console.table(texts.map((t, idx) => ({
       Index: idx,
       Original: t,
-      Translated: translations[idx] || "(응답 없음)"
+      Translated: translations[idx] || "(응답 없음)",
+      Phonetic: phonetics[idx] || ""
     })));
     console.groupEnd();
 
-    return { translations, engine: mode };
+    return { translations, phonetics, engine: mode };
   } catch (err) {
     console.error(`[WebTranslator DEBUG] [Engine: ${mode.toUpperCase()}] 번역 실패:`, err);
     throw err;

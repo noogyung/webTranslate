@@ -49,7 +49,7 @@ export async function translateWithGemini(texts, targetLang, apiKey, modelName =
     if (i > 0) {
       await new Promise((r) => setTimeout(r, 800));
     }
-    const response = await _geminiRequestWithRetry(batch.texts, langName, apiKey, activeModel, 0, new Set(), options);
+    const response = await _geminiRequestWithRetry(batch.texts, langName, apiKey, activeModel, 0, options);
     
     response.forEach((t, j) => {
       results[batch.startIdx + j] = t;
@@ -105,11 +105,20 @@ async function _geminiRequest(texts, langName, url, options = {}) {
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) throw new Error("Gemini API에서 유효한 응답을 받지 못했습니다.");
 
-  let translations;
+  let parsed;
   try {
-    translations = JSON.parse(rawText);
+    parsed = JSON.parse(rawText);
   } catch {
     throw new Error("Gemini 응답을 JSON으로 파싱할 수 없습니다.");
+  }
+
+  let translations;
+  if (Array.isArray(parsed)) {
+    translations = parsed;
+  } else if (parsed && Array.isArray(parsed.translations)) {
+    translations = parsed.translations;
+  } else {
+    translations = parsed;
   }
 
   if (!Array.isArray(translations)) {

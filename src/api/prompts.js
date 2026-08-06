@@ -39,10 +39,16 @@ export function buildTranslationPrompt(langName, engineType, customPrompt = "", 
 }
 
 export function buildDictionaryPrompt(word, langName) {
-  return `Provide a concise dictionary entry for "${word}" translated into ${langName}.\n` +
+  return `Provide a concise dictionary entry for the input text "${word}" translated into ${langName}.\n` +
     `CRITICAL INSTRUCTIONS:\n` +
-    `1. Provide AT MOST THE TOP 3 MOST COMMON definitions.\n` +
-    `2. Each definition MUST have a short, concise ${langName} meaning (2 to 5 words only, e.g. "경기, 놀이" or "(시스템을) 악용하다"). Do NOT write long explanatory sentences!\n` +
-    `3. For EVERY definition, provide a realistic example sentence in source language with its natural ${langName} translation that ACCURATELY matches that specific definition.\n` +
-    `4. Return ONLY a JSON object: {"word":"${word}","pronunciation":"[How to read the original word in ${langName} characters]","inflections":"","definitions":[{"pos":"Part of speech in ${langName}","meaning":"Short concise meaning","example":{"en":"Example","ko":"Translation"}}]}`;
+    `1. If the input is a single word: Provide AT MOST THE TOP 3 MOST COMMON definitions.\n` +
+    `   - Each definition MUST have a short, concise ${langName} meaning (2 to 5 words only).\n` +
+    `   - Provide a realistic example sentence matching the definition.\n` +
+    `2. If the input is a PHRASE or FULL SENTENCE (not a single word):\n` +
+    `   - Set "pos" to "구" (Phrase) or "문장" (Sentence).\n` +
+    `   - Provide the direct, natural translation of the entire phrase/sentence in the "meaning" field.\n` +
+    `   - DO NOT generate or invent an "example". Set the "example" field to null.\n` +
+    `3. "pronunciation": Provide the phonetic pronunciation of the ORIGINAL SOURCE TEXT, transliterated into the characters of the target language (${langName}). For example, if the source is Japanese and the target is Korean, write the Japanese pronunciation using Korean Hangul. DO NOT translate the text in this field.\n` +
+    `4. Return ONLY a valid JSON object matching this schema:\n` +
+    `{"word":"${word}","pronunciation":"[Phonetic characters in ${langName}]","definitions":[{"pos":"Part of speech","meaning":"Meaning or Translation","example":{"source":"Original example sentence","target":"Translated example sentence"}}]}`;
 }
