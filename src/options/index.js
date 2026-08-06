@@ -4,8 +4,7 @@
  * Chrome Storage API를 사용하여 설정을 저장/불러옵니다.
  */
 
-(function () {
-  "use strict";
+  let currentCustomDict = [];
 
   /* ── DOM 요소 참조 ──────────────────────────────────────────── */
 
@@ -286,8 +285,6 @@
   );
 
   /* ── 엑셀 스타일 사용자 사전 모달 로직 ──────────────────────────────── */
-
-  let currentCustomDict = [];
 
   const openDictModalBtn = document.getElementById("openDictModalBtn");
   const closeDictModalBtn = document.getElementById("closeDictModalBtn");
@@ -758,4 +755,3 @@
       saveStatus.classList.remove("show");
     }, 3000);
   }
-})();

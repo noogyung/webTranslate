@@ -15,7 +15,7 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "src/background/index.js",
     "type": "module"
   },
   "content_scripts": [
@@ -24,7 +24,7 @@
         "<all_urls>"
       ],
       "js": [
-        "content.js"
+        "src/content/boot.js"
       ],
       "css": [
         "content.css"
