@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Translator — 설정</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="32" height="32">
+          <path d="M5 8l6 6"/>
+          <path d="M4 14l6-6 2-3"/>
+          <path d="M2 5h12"/>
+          <path d="M7 2h1"/>
+          <path d="m22 22-5-10-5 10"/>
+          <path d="M14 18h6"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Web Translator</h1>
+        <p class="header-subtitle">Alt+A를 눌러 웹 페이지를 자동으로 번역합니다</p>
+      </div>
+    </header>
+
+    <!-- 번역 모드 -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+        번역 모드
+      </h2>
+
+      <div class="mode-selector" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); flex-wrap: wrap;">
+        <label class="mode-card" id="mode-google">
+          <input type="radio" name="translationMode" value="google" />
+          <div class="mode-card-inner">
+            <div class="mode-badge free">무료</div>
+            <div class="mode-name">Google 번역</div>
+            <div class="mode-desc">빠르고 무료인 Google 번역 엔진을 사용합니다.</div>
+          </div>
+        </label>
+
+        <label class="mode-card" id="mode-gemini">
+          <input type="radio" name="translationMode" value="gemini" />
+          <div class="mode-card-inner">
+            <div class="mode-badge ai">AI</div>
+            <div class="mode-name">Gemini AI</div>
+            <div class="mode-desc">Google AI Studio 무료 API 번역을 제공합니다.</div>
+          </div>
+        </label>
+
+        <label class="mode-card" id="mode-openai">
+          <input type="radio" name="translationMode" value="openai" />
+          <div class="mode-card-inner">
+            <div class="mode-badge ai" style="background: linear-gradient(135deg, #10a37f, #059669);">GPT</div>
+            <div class="mode-name">ChatGPT API</div>
+            <div class="mode-desc">OpenAI GPT-4o-mini / GPT-4o 번역 엔진.</div>
+          </div>
+        </label>
+
+        <label class="mode-card" id="mode-claude">
+          <input type="radio" name="translationMode" value="claude" />
+          <div class="mode-card-inner">
+            <div class="mode-badge ai" style="background: linear-gradient(135deg, #d97706, #b45309);">Claude</div>
+            <div class="mode-name">Claude API</div>
+            <div class="mode-desc">Anthropic Claude 3.5 Haiku / Sonnet 번역.</div>
+          </div>
+        </label>
+
+        <label class="mode-card" id="mode-ollama">
+          <input type="radio" name="translationMode" value="ollama" />
+          <div class="mode-card-inner">
+            <div class="mode-badge free" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);">무제한</div>
+            <div class="mode-name">Ollama (로컬)</div>
+            <div class="mode-desc">내 컴퓨터에서 실행하는 100% 무료 로컬 LLM.</div>
+          </div>
+        </label>
+
+        <label class="mode-card" id="mode-libre">
+          <input type="radio" name="translationMode" value="libre" />
+          <div class="mode-card-inner">
+            <div class="mode-badge free">서버</div>
+            <div class="mode-name">Libre Translate</div>
+            <div class="mode-desc">개인 서버나 무료 API를 통해 번역합니다.</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Gemini API Key -->
+      <div class="api-key-section" id="apiKeySection">
+        <label class="field-label" for="geminiApiKey">Gemini API Key</label>
+        <div class="input-group">
+          <input
+            type="password"
+            id="geminiApiKey"
+            class="text-input"
+            placeholder="AIzaSy..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button type="button" id="toggleKeyVisibility" class="icon-btn" title="키 보기/숨기기">
+            <svg id="eyeIcon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+          </button>
+        </div>
+        <p class="field-hint">
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>에서 무료 API 키를 발급받을 수 있습니다.
+        </p>
+      </div>
+
+      <!-- Gemini Model -->
+      <div class="api-key-section" id="apiModelSection" style="margin-top: 16px;">
+        <label class="field-label" for="geminiModel">Gemini 모델</label>
+        <div class="input-group">
+          <input
+            type="text"
+            id="geminiModel"
+            class="text-input"
+            list="geminiModelList"
+            value="gemini-flash-lite-latest"
+            placeholder="gemini-flash-lite-latest 또는 gemini-2.5-flash"
+            spellcheck="false"
+          />
+          <button type="button" id="loadModelsBtn" class="btn-primary" style="white-space: nowrap; padding: 6px 12px; font-size: 13px;" title="현재 API Key로 사용 가능한 모델 목록 조회">
+            가용 모델 조회
+          </button>
+          <datalist id="geminiModelList">
+            <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (추천 - 경량/최신)</option>
+            <option value="gemini-flash-latest">gemini-flash-latest (최신)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+          </datalist>
+        </div>
+      </div>
+
+      <!-- OpenAI API Key & Model -->
+      <div class="api-key-section" id="openaiSection" style="margin-top: 16px; display: none;">
+        <label class="field-label" for="openaiApiKey">OpenAI API Key</label>
+        <div class="input-group">
+          <input type="password" id="openaiApiKey" class="text-input" placeholder="sk-proj-..." autocomplete="off" spellcheck="false" />
+        </div>
+        <div style="margin-top: 10px;">
+          <label class="field-label" for="openaiModel">OpenAI 모델</label>
+          <div class="input-group">
+            <input
+              type="text"
+              id="openaiModel"
+              class="text-input"
+              list="openaiModelList"
+              value="gpt-4o-mini"
+              placeholder="gpt-4o-mini 또는 gpt-4o"
+              spellcheck="false"
+            />
+            <button type="button" id="loadOpenAIModelsBtn" class="btn-primary" style="white-space: nowrap; padding: 6px 12px; font-size: 13px;" title="현재 OpenAI API Key로 사용 가능한 모델 목록 조회">
+              가용 모델 조회
+            </button>
+            <datalist id="openaiModelList">
+              <option value="gpt-4o-mini">gpt-4o-mini (빠르고 경제적 - 추천)</option>
+              <option value="gpt-4o">gpt-4o (최고 성능)</option>
+              <option value="gpt-4-turbo">gpt-4-turbo</option>
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+            </datalist>
+          </div>
+        </div>
+        <p class="field-hint"><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI Platform</a>에서 API 키를 발급받을 수 있습니다.</p>
+      </div>
+
+      <!-- Claude API Key & Model -->
+      <div class="api-key-section" id="claudeSection" style="margin-top: 16px; display: none;">
+        <label class="field-label" for="claudeApiKey">Claude API Key</label>
+        <div class="input-group">
+          <input type="password" id="claudeApiKey" class="text-input" placeholder="sk-ant-api..." autocomplete="off" spellcheck="false" />
+        </div>
+        <div style="margin-top: 10px;">
+          <label class="field-label" for="claudeModel">Claude 모델</label>
+          <select id="claudeModel" class="select-input" style="width: 100%;">
+            <option value="claude-3-5-haiku-20241022" selected>claude-3-5-haiku (빠르고 슬림 - 추천)</option>
+            <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (최고 품격)</option>
+          </select>
+        </div>
+        <p class="field-hint"><a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>에서 API 키를 발급받을 수 있습니다.</p>
+      </div>
+
+      <!-- Ollama URL & Model -->
+      <div class="api-key-section" id="ollamaSection" style="margin-top: 16px; display: none;">
+        <label class="field-label" for="ollamaUrl">Ollama 서버 주소</label>
+        <div class="input-group">
+          <input type="url" id="ollamaUrl" class="text-input" placeholder="http://localhost:11434" value="http://localhost:11434" spellcheck="false" />
+        </div>
+        <div style="margin-top: 10px;">
+          <label class="field-label" for="ollamaModel">Ollama 모델명</label>
+          <input type="text" id="ollamaModel" class="text-input" placeholder="qwen2.5 또는 llama3, gemma2" value="qwen2.5" spellcheck="false" />
+        </div>
+        <div style="margin-top: 10px;">
+          <label class="field-label" for="ollamaCustomPrompt">커스텀 번역 프롬프트 (선택)</label>
+          <textarea id="ollamaCustomPrompt" class="text-input" style="height: 60px; resize: vertical;" placeholder="Ollama에 추가적으로 전달할 번역 지시사항을 입력하세요." spellcheck="false"></textarea>
+        </div>
+        <p class="field-hint">컴퓨터에 <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>를 설치한 후 <code>ollama run qwen2.5</code> 등으로 실행하세요.</p>
+      </div>
+
+      <!-- Libre Translate URL -->
+      <div class="api-key-section" id="libreUrlSection" style="margin-top: 16px; display: none;">
+        <label class="field-label" for="libreUrl">LibreTranslate 서버 주소</label>
+        <div class="input-group">
+          <input type="url" id="libreUrl" class="text-input" placeholder="http://localhost:5000" spellcheck="false" />
+        </div>
+        <p class="field-hint">직접 호스팅하는 LibreTranslate 서버 주소를 입력하세요.</p>
+      </div>
+
+    </section>
+
+    <!-- 표시 옵션 -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+        표시 옵션
+      </h2>
+
+      <div class="display-selector">
+        <label class="display-option" id="display-dual">
+          <input type="radio" name="displayMode" value="dual" />
+          <div class="display-option-inner">
+            <div class="display-preview dual-preview">
+              <div class="preview-line original">Original text here</div>
+              <div class="preview-line translated">번역된 텍스트</div>
+            </div>
+            <div class="display-label">원본 + 번역문</div>
+            <div class="display-desc">원본 아래에 번역문을 함께 표시합니다.</div>
+          </div>
+        </label>
+
+        <label class="display-option" id="display-replace">
+          <input type="radio" name="displayMode" value="replace" />
+          <div class="display-option-inner">
+            <div class="display-preview replace-preview">
+              <div class="preview-line translated-only">번역된 텍스트만 표시</div>
+            </div>
+            <div class="display-label">번역문만 표시</div>
+            <div class="display-desc">원본을 번역문으로 교체합니다.</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- 지연 번역 (Lazy Translation) -->
+      <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+        <label class="field-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #f8fafc; font-size: 15px;">
+          <input type="checkbox" id="lazyTranslate" style="width: 18px; height: 18px; accent-color: #818cf8;" checked />
+          화면 내 텍스트만 지연 번역 (API 및 성능 절약)
+        </label>
+        <p class="field-hint" style="margin-top: 8px; margin-left: 28px;">
+          체크하면 처음 단축키를 누를 때 보이는 부분만 즉시 번역하고, 스크롤을 내릴 때마다 나타나는 텍스트를 실시간으로 번역합니다. 통신량을 극적으로 아낄 수 있습니다.
+        </p>
+      </div>
+
+      <!-- 팝업 음절 표시 -->
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+        <label class="field-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #f8fafc; font-size: 15px;">
+          <input type="checkbox" id="showPhonetics" style="width: 18px; height: 18px; accent-color: #818cf8;" checked />
+          팝업 번역 시 원문 발음 기호(독음) 표시
+        </label>
+        <p class="field-hint" style="margin-top: 8px; margin-left: 28px;">
+          드래그 번역 팝업 상단에 원문을 목표어로 읽는 발음(독음)을 함께 표시합니다. (AI 전용)
+        </p>
+      </div>
+
+      <!-- 번역문 스타일 커스터마이징 -->
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div class="field-label" style="font-size: 15px; color: #f8fafc; margin: 0;">번역 테마 스타일 설정</div>
+          <button type="button" id="resetStyleBtn" class="btn-secondary" style="padding: 3px 8px; font-size: 12px;">스타일 초기화</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 14px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #cbd5e1; cursor: pointer;">
+            테마(배경) 색상:
+            <input type="color" id="transColor" value="#818cf8" style="width: 32px; height: 32px; border: none; background: transparent; cursor: pointer; border-radius: 4px;" />
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #cbd5e1;">
+            글자 크기:
+            <select id="transFontSize" class="select-input" style="padding: 4px 8px; font-size: 13px;">
+              <option value="85%">작게 (85%)</option>
+              <option value="90%">약간 작게 (90%)</option>
+              <option value="100%" selected>보통 (100%)</option>
+              <option value="110%">약간 크게 (110%)</option>
+              <option value="120%">크게 (120%)</option>
+            </select>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #cbd5e1; cursor: pointer;">
+            <input type="checkbox" id="transItalic" style="width: 16px; height: 16px; accent-color: #818cf8;" />
+            기울임꼴(Italic) 적용
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #cbd5e1; width: 100%;">
+            블록 배경 투명도:
+            <input type="range" id="transBgAlpha" min="0" max="0.5" step="0.01" value="0.12" style="flex: 1; max-width: 200px; accent-color: #818cf8;" />
+          </label>
+        </div>
+
+        <!-- 실시간 스타일 미리보기 상자 -->
+        <div id="stylePreviewBox" style="padding: 12px 16px; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px;">실시간 테마 미리보기:</div>
+          <div style="margin-bottom: 8px; font-size: 13px; color: #cbd5e1;">
+            인라인: Original Sentence <span id="previewInline" style="color: #818cf8; font-size: 100%; margin-left: 4px;">(번역된 문장 예시입니다)</span>
+          </div>
+          <div id="previewBlock" style="padding: 8px 12px; color: #818cf8; background: rgba(129, 140, 248, 0.12); border-left: 3.5px solid #818cf8; border-radius: 0 6px 6px 0; font-size: 100%;">
+            블록 번역 및 배경 색상이 함께 연동되어 적용됩니다.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 사용자 사전 (Custom Dictionary) -->
+    <section class="card">
+      <h2 class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          사용자 사전 (단어장)
+        </span>
+        <button type="button" id="openDictModalBtn" class="btn-primary" style="padding: 6px 14px; font-size: 13.5px; background: linear-gradient(135deg, #10b981, #059669);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+          사전 편집창 열기 (Excel 모드)
+        </button>
+      </h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+        <div>
+          <div style="font-size: 14px; color: #f8fafc; font-weight: 500;" id="dictSummaryCount">등록된 단어: 0개</div>
+          <div class="field-hint" style="margin-top: 2px;">원문과 번역문을 지정하면 API 호출 없이 자동 변환되며 엑셀(CSV) 가져오기/내보내기를 지원합니다.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 목표 언어 -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v2.197A5.973 5.973 0 0110 16v-2a2 2 0 00-2-2 2 2 0 00-1.668-1.973z" clip-rule="evenodd"/></svg>
+        목표 언어
+      </h2>
+
+      <div class="field-row">
+        <label class="field-label" for="targetLang">번역 대상 언어</label>
+        <select id="targetLang" class="select-input">
+          <option value="ko">🇰🇷 한국어 (Korean)</option>
+          <option value="en">🇺🇸 영어 (English)</option>
+          <option value="ja">🇯🇵 일본어 (Japanese)</option>
+          <option value="zh-CN">🇨🇳 중국어 간체 (Simplified Chinese)</option>
+          <option value="zh-TW">🇹🇼 중국어 번체 (Traditional Chinese)</option>
+          <option value="es">🇪🇸 스페인어 (Spanish)</option>
+          <option value="fr">🇫🇷 프랑스어 (French)</option>
+          <option value="de">🇩🇪 독일어 (German)</option>
+          <option value="pt">🇧🇷 포르투갈어 (Portuguese)</option>
+          <option value="ru">🇷🇺 러시아어 (Russian)</option>
+          <option value="ar">🇸🇦 아랍어 (Arabic)</option>
+          <option value="hi">🇮🇳 힌디어 (Hindi)</option>
+          <option value="vi">🇻🇳 베트남어 (Vietnamese)</option>
+          <option value="th">🇹🇭 태국어 (Thai)</option>
+          <option value="id">🇮🇩 인도네시아어 (Indonesian)</option>
+          <option value="it">🇮🇹 이탈리아어 (Italian)</option>
+          <option value="nl">🇳🇱 네덜란드어 (Dutch)</option>
+          <option value="tr">🇹🇷 터키어 (Turkish)</option>
+          <option value="pl">🇵🇱 폴란드어 (Polish)</option>
+          <option value="sv">🇸🇪 스웨덴어 (Swedish)</option>
+          <option value="uk">🇺🇦 우크라이나어 (Ukrainian)</option>
+          <option value="cs">🇨🇿 체코어 (Czech)</option>
+          <option value="el">🇬🇷 그리스어 (Greek)</option>
+          <option value="he">🇮🇱 히브리어 (Hebrew)</option>
+          <option value="ro">🇷🇴 루마니아어 (Romanian)</option>
+          <option value="hu">🇭🇺 헝가리어 (Hungarian)</option>
+          <option value="fi">🇫🇮 핀란드어 (Finnish)</option>
+          <option value="da">🇩🇰 덴마크어 (Danish)</option>
+          <option value="no">🇳🇴 노르웨이어 (Norwegian)</option>
+          <option value="ms">🇲🇾 말레이어 (Malay)</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- 저장 및 캐시 관리 버튼 -->
+    <div class="actions">
+      <button type="button" id="saveBtn" class="btn-primary">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+        설정 저장
+      </button>
+      <button type="button" id="clearCacheBtn" class="btn-secondary" style="background-color: #ef4444; color: white; margin-left: 10px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+        캐시 초기화
+      </button>
+      <div id="saveStatus" class="save-status"></div>
+    </div>
+
+    <!-- 단축키 안내 -->
+    <footer class="footer">
+      <div class="shortcut-hint">
+        <kbd>Alt</kbd> + <kbd>A</kbd> 를 눌러 현재 페이지를 번역하세요. 다시 누르면 원본으로 복원됩니다.
+      </div>
+      <div class="version">Web Translator v2.3.0</div>
+    </footer>
+  </div>
+
+  <!-- ── 엑셀 스타일 사용자 사전 모달 팝업 ────────────────────────── -->
+  <div id="dictModal" class="dict-modal-overlay" style="display: none;">
+    <div class="dict-modal-content">
+      <div class="dict-modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+          <h3 style="margin: 0; font-size: 18px; color: #f8fafc;">사용자 사전 편집기 (Excel Grid)</h3>
+        </div>
+        <button type="button" id="closeDictModalBtn" class="icon-btn" style="width: 32px; height: 32px; border: none; background: transparent; font-size: 20px; color: #94a3b8;">✕</button>
+      </div>
+
+      <!-- 툴바 바 -->
+      <div class="dict-modal-toolbar">
+        <button type="button" id="addDictRowBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px;">+ 행 추가</button>
+        <button type="button" id="importCsvBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px;">📥 CSV/엑셀 가져오기</button>
+        <button type="button" id="exportCsvBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px;">📤 CSV 내보내기</button>
+        <button type="button" id="clearDictBtn" class="btn-secondary" style="padding: 6px 12px; font-size: 13px; color: #f87171; border-color: rgba(248,113,113,0.3);">🗑️ 전체 삭제</button>
+        <input type="file" id="csvFileInput" accept=".csv,.tsv,.txt" style="display: none;" />
+      </div>
+
+      <div style="font-size: 12px; color: #94a3b8; margin-bottom: 12px; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+        💡 <b>팁</b>: 엑셀이나 Google 시트에서 데이터 영역을 복사(Ctrl+C) 후 테이블에 Ctrl+V로 바로 붙여넣거나 CSV 파일로 불러올 수 있습니다.
+      </div>
+
+      <!-- 엑셀 데이터 테이블 -->
+      <div class="excel-grid-container">
+        <table class="excel-grid-table">
+          <thead>
+            <tr>
+              <th style="width: 45px; text-align: center;">#</th>
+              <th>원문 (Original)</th>
+              <th>번역문 (Translated)</th>
+              <th style="width: 55px; text-align: center;">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="dictModalTableBody">
+            <!-- JS로 동적 생성 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 모달 푸터 -->
+      <div class="dict-modal-footer">
+        <span id="modalRowCount" style="font-size: 13px; color: #94a3b8;">총 0개 항목</span>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" id="cancelDictModalBtn" class="btn-secondary" style="padding: 8px 16px;">취소</button>
+          <button type="button" id="saveDictModalBtn" class="btn-primary" style="padding: 8px 20px; background: linear-gradient(135deg, #10b981, #059669);">저장 및 적용</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

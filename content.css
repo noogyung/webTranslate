@@ -1,0 +1,370 @@
+:root {
+  --wt-theme-color: #818cf8;
+  --wt-text-color: #818cf8;
+  --wt-trans-bg: rgba(129, 140, 248, 0.12);
+  --wt-trans-border: rgba(129, 140, 248, 0.45);
+  --wt-trans-font-size: 100%;
+  --wt-trans-font-style: normal;
+}
+
+/* ── 텍스트 래퍼 (고아 텍스트 수집용) ────────────────────────── */
+
+.wt-text-wrapper {
+  display: contents; /* 래퍼 자체는 레이아웃에 영향 없음 */
+}
+
+/* ── 번역 결과 span (통합) ───────────────────────────────────── */
+
+/* 인라인 번역: 원문 바로 옆에 (번역) 형태 */
+.wt-translation.wt-inline,
+.wt-dual-inline {
+  display: inline;
+  color: var(--wt-text-color) !important;
+  font-size: var(--wt-trans-font-size) !important;
+  font-style: var(--wt-trans-font-style) !important;
+  font-weight: 500;
+  opacity: 0.95;
+  white-space: normal;        /* 번역문이 길면 줄바꿈 허용 */
+  word-break: break-word;     /* 긴 단어도 UI 밖으로 밀려나지 않도록 */
+  overflow-wrap: break-word;
+  animation: wt-fadeIn 0.25s ease-out;
+  margin-left: 3px;
+}
+
+/* 블록 번역: 원문 아래 별도 줄 */
+.wt-translation.wt-block,
+.wt-dual-block {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 14px;
+  color: var(--wt-text-color) !important;
+  background: var(--wt-trans-bg) !important;
+  border-left: 3.5px solid var(--wt-theme-color) !important;
+  border-radius: 0 8px 8px 0;
+  font-size: var(--wt-trans-font-size) !important;
+  font-style: var(--wt-trans-font-style) !important;
+  font-weight: 400;
+  line-height: 1.65;
+  white-space: normal;
+  animation: wt-fadeIn 0.25s ease-out;
+}
+
+br.wt-dual-br { display: none; }
+
+/* 다크 모드 미세 조정 */
+@media (prefers-color-scheme: dark) {
+  .wt-translation.wt-block,
+  .wt-dual-block {
+    border-left-color: rgba(129, 140, 248, 0.45);
+  }
+
+  .wt-translation.wt-inline,
+  .wt-dual-inline {
+  }
+}
+
+/* ── Replace 모드: 교체된 요소 (시각적 표시 없음) ─────────────── */
+
+[data-wt-translated="replaced"] {
+  /* 자연스럽게 보이도록 별도 스타일 없음 */
+}
+
+/* ── Text-node 교체 모드 (비순수 요소) ────────────────────────── */
+
+[data-wt-translated="textnode"] {
+  /* 이미지·SVG 등은 보존, 텍스트만 교체됨 */
+}
+
+/* ── 상태 표시기 (Status Indicator) ─────────────────────────── */
+
+.wt-status-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2147483647;
+  background: rgba(15, 15, 35, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #e2e8f0;
+  padding: 14px 22px;
+  border-radius: 14px;
+  font-family: "Segoe UI", "Apple SD Gothic Neo", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  animation: wt-slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.wt-status-indicator.wt-hiding {
+  animation: wt-slideOut 0.3s ease-in forwards;
+}
+
+/* ── 스피너 ──────────────────────────────────────────────────── */
+
+.wt-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--wt-theme-color) !important;
+  border-radius: 50%;
+  animation: wt-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── 완료/오류 아이콘 ────────────────────────────────────────── */
+
+.wt-icon-done,
+.wt-icon-error {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.wt-icon-done {
+  color: #34d399;
+}
+
+.wt-icon-error {
+  color: #f87171;
+}
+
+/* ── 프로그레스 바 ───────────────────────────────────────────── */
+
+.wt-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--wt-theme-color) !important;
+  border-radius: 0 0 14px 14px;
+  transition: width 0.3s ease-out;
+}
+
+/* ── Animations ──────────────────────────────────────────────── */
+
+@keyframes wt-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wt-slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes wt-slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px) scale(0.95);
+  }
+}
+
+@keyframes wt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ────────────────────────────────────────────
+ * 단어 호버 사전 팝업 카드 (v2.2)
+ * ──────────────────────────────────────────── */
+
+.wt-dictionary-popup {
+  position: absolute;
+  z-index: 2147483646;
+  max-width: 420px;
+  width: max-content;
+  min-width: 260px;
+  background: rgba(18, 20, 36, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--wt-trans-border) !important;
+  border-radius: 12px;
+  padding: 16px;
+  color: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", sans-serif;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--wt-trans-border) !important;
+  animation: wt-fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.wt-dict-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.wt-dict-word {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--wt-theme-color) !important;
+}
+
+.wt-dict-phonetic {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.wt-dict-inflection {
+  font-size: 12px;
+  color: #cbd5e1;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.wt-dict-pos-group {
+  margin-bottom: 12px;
+}
+
+.wt-dict-pos-group:last-child {
+  margin-bottom: 0;
+}
+
+.wt-dict-entry {
+  margin-bottom: 8px;
+}
+
+.wt-dict-entry:last-child {
+  margin-bottom: 0;
+}
+
+.wt-dict-pos,
+.wt-dict-pos-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wt-theme-color) !important;
+  background: var(--wt-trans-bg) !important;
+  border: 1px solid var(--wt-trans-border) !important;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.wt-dict-meaning {
+  margin-left: 2px;
+  color: #e2e8f0;
+}
+
+.wt-dict-example {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3.5px solid var(--wt-theme-color) !important;
+  border-radius: 0 6px 6px 0;
+  font-size: 12.5px;
+}
+
+.wt-dict-example-en {
+  color: #cbd5e1;
+}
+
+.wt-dict-example-ko {
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.wt-mode-toggle {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.wt-mode-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ────────────────────────────────────────────
+ * Image Translation (v3.0) Styles
+ * ──────────────────────────────────────────── */
+
+.wt-image-trans-btn {
+  background: #6366f1;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(4px);
+}
+
+.wt-image-trans-btn:hover {
+  background: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.wt-image-trans-btn.wt-loading {
+  background: #4338ca;
+  cursor: wait;
+  opacity: 0.9;
+}
+
+.wt-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #ffffff;
+  animation: wt-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes wt-spin {
+  to { transform: rotate(360deg); }
+}
+
+.wt-image-canvas-overlay {
+  pointer-events: none;
+  z-index: 999990;
+}
+
