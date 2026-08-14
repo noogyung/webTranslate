@@ -76,18 +76,21 @@ import { applyLocalDictionary, buildDictRegex } from "./translation.js";
     var clean = text.trim();
     if (!clean) return false;
 
+    // NFD 분해형 유니코드 정규화
+    clean = clean.normalize("NFC");
+
     var allLetters = clean.match(/\p{L}/gu);
     if (!allLetters || allLetters.length === 0) return false;
 
     var targetCount = 0;
     if (targetLang === "ko") {
-      var matches = clean.match(/[\uAC00-\uD7A3]/g);
+      var matches = clean.match(/[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uD7B0-\uD7FF]/g);
       targetCount = matches ? matches.length : 0;
     } else if (targetLang === "en") {
       var matches = clean.match(/[a-zA-Z]/g);
       targetCount = matches ? matches.length : 0;
     } else if (targetLang === "ja") {
-      var matches = clean.match(/[\u3040-\u309F\u30A0-\u30FF]/g);
+      var matches = clean.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/g);
       targetCount = matches ? matches.length : 0;
     } else if (targetLang === "zh-CN" || targetLang === "zh-TW") {
       var matches = clean.match(/[\u4E00-\u9FFF]/g);
@@ -109,11 +112,14 @@ import { applyLocalDictionary, buildDictRegex } from "./translation.js";
     } else if (targetLang === "el") {
       var matches = clean.match(/[\u0370-\u03FF]/g);
       targetCount = matches ? matches.length : 0;
+    } else if (["es", "fr", "de", "pt", "it", "nl", "pl", "sv", "cs", "ro", "hu", "fi", "da", "no", "ms", "id", "tr", "vi"].includes(targetLang)) {
+      var matches = clean.match(/[a-zA-Z\u00C0-\u024F\u1EA0-\u1EF9]/g);
+      targetCount = matches ? matches.length : 0;
     } else {
       return false;
     }
 
-    var threshold = isSelection ? 0.85 : 0.6;
+    var threshold = 0.10; // 목표 언어 문자 비율 10% 이상 판정
     return (targetCount / allLetters.length) >= threshold;
   }
 

@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@paddleocr/paddleocr-js": "^0.4.2",
+    "@techstark/opencv-js": "^5.0.0-release.1",
+    "ppu-paddle-ocr": "^6.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
