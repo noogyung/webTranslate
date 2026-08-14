@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Web Translator — Full Page & Drag Text Translation",
+    "description": "Extension name"
+  },
+  "appDescription": {
+    "message": "Translate web pages inline with Alt+A shortcut and look up selected words/sentences with dictionary popups. Supports Google, Gemini, OpenAI, Claude, and Ollama.",
+    "description": "Extension description"
+  }
+}

@@ -20,22 +20,8 @@ export function initializeKeyboardShortcuts() {
 
     try {
       await chrome.tabs.sendMessage(tab.id, { action: "toggleTranslation" });
-    } catch {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ["src/content/boot.js"],
-        });
-        await chrome.scripting.insertCSS({
-          target: { tabId: tab.id },
-          files: ["content.css"],
-        });
-        setTimeout(async () => {
-          await chrome.tabs.sendMessage(tab.id, { action: "toggleTranslation" });
-        }, 200);
-      } catch (injectErr) {
-        console.error("[WebTranslator] Content script 주입 실패:", injectErr);
-      }
+    } catch (err) {
+      console.warn("[WebTranslator] 탭 메시지 전송 실패 (페이지 새로고침 필요):", err);
     }
   });
 }

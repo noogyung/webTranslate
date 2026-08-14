@@ -1,10 +1,10 @@
 {
   "appName": {
-    "message": "Web Translator",
+    "message": "Web Translator — 웹 페이지 및 드래그 텍스트 번역",
     "description": "확장 프로그램 이름"
   },
   "appDescription": {
-    "message": "Alt+A를 눌러 웹 페이지 전체를 자동 번역합니다. Google 번역 및 Gemini AI 지원.",
+    "message": "Alt+A 단축키로 웹 페이지 전체를 인라인 번역하고, 텍스트 드래그 시 사전 및 번역 팝업을 제공합니다. Google 번역, Gemini, OpenAI, Claude, Ollama 지원.",
     "description": "확장 프로그램 설명"
   }
 }

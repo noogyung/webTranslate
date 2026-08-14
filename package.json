@@ -1,8 +1,11 @@
 {
-  "dependencies": {
-    "@paddleocr/paddleocr-js": "^0.4.2",
-    "@techstark/opencv-js": "^5.0.0-release.1",
-    "ppu-paddle-ocr": "^6.4.0"
+  "name": "web-translator",
+  "version": "1.0.0",
+  "description": "Chrome Extension for inline full-page web translation and text selection dictionary lookup.",
+  "type": "module",
+  "scripts": {
+    "package": "node scripts/package.js",
+    "resize-icons": "powershell -ExecutionPolicy Bypass -File scripts/resize-icons.ps1"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
