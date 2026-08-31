@@ -1,5 +1,5 @@
 import { getSettings, saveSettings, clearTranslationCache } from "./storage.js";
-import { fetchGeminiModels, fetchOpenAIModels } from "./api.js";
+import { fetchGeminiModels, fetchOpenAIModels, fetchCustomModels } from "./api.js";
 import { updateUI, updateStylePreview, showSaveStatus } from "./ui.js";
 import { initDictionaryModal, setCustomDict, getCustomDict } from "./dictionary.js";
 
@@ -58,6 +58,23 @@ const resetStyleBtn = document.getElementById("resetStyleBtn");
 const clearCacheBtn = document.getElementById("clearCacheBtn");
 const resetShortcutBtn = document.getElementById("resetShortcutBtn");
 
+// v2.0 이미지 번역 설정
+const imageTransModeSelect = document.getElementById("imageTransMode");
+const imageTransPremiumEngineSelect = document.getElementById("imageTransPremiumEngine");
+const premiumGeminiModelInput = document.getElementById("premiumGeminiModel");
+const premiumOpenAIModelInput = document.getElementById("premiumOpenAIModel");
+const premiumGeminiSection = document.getElementById("premiumGeminiSection");
+const premiumOpenAISection = document.getElementById("premiumOpenAISection");
+const imageCostNotifyInput = document.getElementById("imageCostNotify");
+
+// v2.0 커스텀 엔진
+const customApiUrlInput = document.getElementById("customApiUrl");
+const customApiKeyInput = document.getElementById("customApiKey");
+const customModelInput = document.getElementById("customModel");
+const loadCustomModelsBtn = document.getElementById("loadCustomModelsBtn");
+const customModelList = document.getElementById("customModelList");
+const customEngineSection = document.getElementById("customEngineSection");
+
 /* ── 초기화 ──────────────────────────────────────────────── */
 async function initialize() {
   const settings = await getSettings();
@@ -107,6 +124,34 @@ async function initialize() {
   // 사용자 사전
   setCustomDict(settings.customDict || []);
 
+  // v2.0 이미지 번역 설정
+  if (imageTransModeSelect) imageTransModeSelect.value = settings.imageTransMode || "ask";
+  if (imageCostNotifyInput) imageCostNotifyInput.checked = settings.imageCostNotify !== false;
+
+  const savedEngine = settings.imageTransPremiumEngine || "gemini";
+  if (imageTransPremiumEngineSelect) imageTransPremiumEngineSelect.value = savedEngine;
+
+  // 엔진별 모델 기본값 (저장된 값 우선, 없으면 엔진별 기본값)
+  if (premiumGeminiModelInput) {
+    premiumGeminiModelInput.value = settings.premiumGeminiModel || "gemini-3.1-flash-image";
+  }
+  if (premiumOpenAIModelInput) {
+    premiumOpenAIModelInput.value = settings.premiumOpenAIModel || "gpt-image-2";
+  }
+
+  // 엔진 섹션 토글
+  updatePremiumEngineSection(savedEngine);
+
+  // v2.0 커스텀 엔진 설정
+  if (customApiUrlInput) customApiUrlInput.value = settings.customApiUrl || "";
+  if (customApiKeyInput) customApiKeyInput.value = settings.customApiKey || "";
+  if (customModelInput) customModelInput.value = settings.customModel || "";
+
+  // 커스텀 섹션 표시/숨김
+  if (customEngineSection) {
+    customEngineSection.style.display = settings.translationMode === "custom" ? "" : "none";
+  }
+
   // 사전 모달 이벤트 위임
   initDictionaryModal(async (newDict) => {
     await saveSettings({ customDict: newDict });
@@ -114,6 +159,18 @@ async function initialize() {
 }
 
 document.addEventListener("DOMContentLoaded", initialize);
+
+/* ── 고급 모드 엔진 섹션 토글 ───────────────────────────────── */
+function updatePremiumEngineSection(engine) {
+  if (premiumGeminiSection) premiumGeminiSection.style.display = engine === "gemini" ? "" : "none";
+  if (premiumOpenAISection) premiumOpenAISection.style.display = engine === "openai" ? "" : "none";
+}
+
+if (imageTransPremiumEngineSelect) {
+  imageTransPremiumEngineSelect.addEventListener("change", () => {
+    updatePremiumEngineSection(imageTransPremiumEngineSelect.value);
+  });
+}
 
 /* ── 이벤트 리스너 등록 ────────────────────────────────────── */
 
@@ -326,6 +383,10 @@ if (saveBtn) {
       libreUrlInput.focus();
       return;
     }
+    if (mode === "custom" && (!customApiUrlInput?.value.trim() || !customApiKeyInput?.value.trim())) {
+      showSaveStatus("커스텀 엔진 URL과 API Key를 입력해 주세요.", "error");
+      return;
+    }
 
     const settings = {
       translationMode: mode,
@@ -352,6 +413,20 @@ if (saveBtn) {
       transFontSize: transFontSizeSelect ? transFontSizeSelect.value : "100%",
       transItalic: transItalicInput ? transItalicInput.checked : false,
       transBgAlpha: transBgAlphaInput ? parseFloat(transBgAlphaInput.value) : 0.12,
+      // v2.0 이미지 번역
+      imageTransMode: imageTransModeSelect ? imageTransModeSelect.value : "ask",
+      imageTransPremiumEngine: imageTransPremiumEngineSelect ? imageTransPremiumEngineSelect.value : "gemini",
+      premiumGeminiModel: premiumGeminiModelInput ? premiumGeminiModelInput.value.trim() : "gemini-3.1-flash-image",
+      premiumOpenAIModel: premiumOpenAIModelInput ? premiumOpenAIModelInput.value.trim() : "gpt-image-2",
+      // 현재 선택 엔진 기준으로 imageTransPremiumModel 결정 (background에서 사용)
+      imageTransPremiumModel: imageTransPremiumEngineSelect?.value === "openai"
+        ? (premiumOpenAIModelInput?.value.trim() || "gpt-image-2")
+        : (premiumGeminiModelInput?.value.trim() || "gemini-3.1-flash-image"),
+      imageCostNotify: imageCostNotifyInput ? imageCostNotifyInput.checked : true,
+      // v2.0 커스텀 엔진
+      customApiUrl: customApiUrlInput ? customApiUrlInput.value.trim() : "",
+      customApiKey: customApiKeyInput ? customApiKeyInput.value.trim() : "",
+      customModel: customModelInput ? customModelInput.value.trim() : "",
     };
 
     try {
@@ -359,6 +434,42 @@ if (saveBtn) {
       showSaveStatus("✓ 설정이 저장되었습니다.", "success");
     } catch(err) {
       showSaveStatus("저장 실패: " + err.message, "error");
+    }
+  });
+}
+
+/* ── 커스텀 엔진 모델 조회 ────────────────────────────────── */
+if (loadCustomModelsBtn) {
+  loadCustomModelsBtn.addEventListener("click", async () => {
+    const apiUrl = customApiUrlInput?.value.trim();
+    const apiKey = customApiKeyInput?.value.trim();
+    if (!apiUrl || !apiKey) {
+      alert("커스텀 엔진 URL과 API Key를 먼저 입력해 주세요.");
+      return;
+    }
+    loadCustomModelsBtn.disabled = true;
+    loadCustomModelsBtn.textContent = "조회 중...";
+    try {
+      const models = await fetchCustomModels(apiUrl, apiKey);
+      if (models.length > 0 && customModelList) {
+        customModelList.innerHTML = "";
+        models.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m;
+          customModelList.appendChild(opt);
+        });
+        if (customModelInput && !models.includes(customModelInput.value)) {
+          customModelInput.value = models[0];
+        }
+        alert(`✅ ${models.length}개 모델을 불러왔습니다.`);
+      } else {
+        alert("가용한 모델을 찾지 못했습니다.");
+      }
+    } catch (err) {
+      alert(`모델 목록 조회 실패: ${err.message}`);
+    } finally {
+      loadCustomModelsBtn.disabled = false;
+      loadCustomModelsBtn.textContent = "가용 모델 조회";
     }
   });
 }

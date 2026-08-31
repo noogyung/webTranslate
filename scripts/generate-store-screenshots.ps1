@@ -174,7 +174,9 @@ public class StoreScreenshotGenerator
 }
 "@ -ReferencedAssemblies System.Drawing
 
-$imgDir = "D:\Noogs\NextCloud\Projects\WebTranslator\images"
-$outDir = "D:\Noogs\NextCloud\Projects\WebTranslator\dist\screenshots"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptDir
+$imgDir = Join-Path $projectRoot "assets\store"
+$outDir = Join-Path $projectRoot "Build\screenshots"
 [StoreScreenshotGenerator]::GenerateAll($imgDir, $outDir)
 Write-Host "Done! Screenshots generated in $outDir"

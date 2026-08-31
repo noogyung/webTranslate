@@ -23,6 +23,17 @@ export const DEFAULT_SETTINGS = {
   inlineHighlight: false,
   inlineAdaptiveColor: false,
   inlineInheritColor: true,
+  // v2.0 이미지 번역 설정
+  imageTransMode: "ask",
+  imageTransPremiumEngine: "gemini",
+  imageTransPremiumModel: "gemini-3.1-flash-image",
+  premiumGeminiModel: "gemini-3.1-flash-image",
+  premiumOpenAIModel: "gpt-image-2",
+  imageCostNotify: true,
+  // v2.0 커스텀 OpenAI 호환 엔진 설정
+  customApiUrl: "",
+  customApiKey: "",
+  customModel: "",
 };
 
 export function getSettings() {

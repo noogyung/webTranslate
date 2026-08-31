@@ -3,6 +3,7 @@ import { fetchOpenAIDictionary } from './engines/openai.js';
 import { fetchClaudeDictionary } from './engines/claude.js';
 import { fetchLibreDictionary } from './engines/libre.js';
 import { fetchGoogleDictionary } from './engines/google.js';
+import { fetchCustomDictionary } from './engines/custom.js';
 
 export function normalizePos(posStr) {
   if (!posStr) return "other";
@@ -30,6 +31,11 @@ export async function fetchWordDictionary(word, targetLang, mode, apiKey, modelN
     return await fetchClaudeDictionary(cleanWord, targetLang, apiKey, modelName);
   } else if (mode === "libre") {
     return await fetchLibreDictionary(cleanWord, targetLang, extraUrl);
+  } else if (mode === "custom" && extraUrl) {
+    const [customUrl, customKey, customModel] = (extraUrl || "").split("|");
+    if (customUrl && customKey && customModel) {
+      return await fetchCustomDictionary(cleanWord, targetLang, customUrl, customKey, customModel);
+    }
   }
 
   return await fetchGoogleDictionary(cleanWord, targetLang);

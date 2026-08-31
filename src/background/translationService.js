@@ -5,6 +5,7 @@ import {
   translateWithOpenAI,
   translateWithClaude,
   translateWithOllama,
+  translateWithCustom,
   fetchWordDictionary
 } from "../api/index.js";
 
@@ -23,6 +24,9 @@ export async function handleTranslation({
   ollamaCustomPrompt,
   libreUrl,
   targetLanguage,
+  customApiUrl,
+  customApiKey,
+  customModel,
 }) {
   const startTime = performance.now();
   console.group(`[WebTranslator DEBUG] [Engine: ${mode.toUpperCase()}] 번역 요청 전송 (Target: ${targetLang} / Batch Size: ${texts.length})`);
@@ -44,6 +48,8 @@ export async function handleTranslation({
       result = await translateWithOllama(texts, targetLang, ollamaUrl, ollamaModel, ollamaCustomPrompt, apiOptions);
     } else if (mode === "libre") {
       result = await translateWithLibre(texts, targetLang, libreUrl, apiOptions);
+    } else if (mode === "custom") {
+      result = await translateWithCustom(texts, targetLang, customApiUrl, customApiKey, customModel, apiOptions);
     } else {
       result = await translateWithGoogle(texts, targetLang, apiOptions);
     }
@@ -85,12 +91,17 @@ export function handleWordDictionary(message) {
     message.mode === "claude" ? message.claudeModel :
     message.geminiModel;
 
+  let extraUrl = message.libreUrl || message.ollamaUrl;
+  if (message.mode === "custom") {
+    extraUrl = `${message.customApiUrl}|${message.customApiKey}|${message.customModel}`;
+  }
+
   return fetchWordDictionary(
     message.word,
     message.targetLang,
     message.mode,
     apiKey,
     modelName,
-    message.libreUrl || message.ollamaUrl
+    extraUrl
   );
 }

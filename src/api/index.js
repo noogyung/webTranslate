@@ -7,6 +7,7 @@ export { fetchAvailableOpenAIModels, translateWithOpenAI } from './engines/opena
 export { translateWithClaude } from './engines/claude.js';
 export { translateWithOllama } from './engines/ollama.js';
 export { translateWithLibre } from './engines/libre.js';
+export { translateWithCustom, fetchCustomDictionary, fetchAvailableCustomModels } from './engines/custom.js';
 
-export { translateImageWithVision, locateBoundingBoxesWithVision } from './vision.js';
+export { translateImageWithVision, locateBoundingBoxesWithVision, normalizeBox } from './vision.js';
 export { fetchWordDictionary, normalizePos } from './dictionary.js';

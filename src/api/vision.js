@@ -162,7 +162,10 @@ export async function translateImageWithVision({
   const finalBlocks = ocrBlocks.map((block, idx) => ({
     ...block,
     translatedText: translations[idx] || block.originalText || "",
-  }));
+    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight),
+    glyphBox: normalizeBox(block.glyphBox, naturalWidth, naturalHeight),
+    containerBox: normalizeBox(block.containerBox, naturalWidth, naturalHeight),
+  })).filter(b => b.eraseBox !== null);
 
   console.group(`[WT Step 3] 이미지 텍스트 번역 완료 (비용 최적화 모델: ${transModelToUse})`);
   console.table(
@@ -234,3 +237,45 @@ function parseVisionJsonResponse(rawText) {
     return [];
   }
 }
+
+/**
+ * [ymin, xmin, ymax, xmax] 배열을 { x, y, width, height } 객체로 변환.
+ * 좌표가 유효 범위를 벗어나면 클램핑, 면적이 0 이하이면 null 반환.
+ */
+export function normalizeBox(rawBox, naturalWidth, naturalHeight) {
+  if (!rawBox || !Array.isArray(rawBox) || rawBox.length !== 4) return null;
+  const [ymin, xmin, ymax, xmax] = rawBox;
+
+  // Gemini Vision은 프롬프트에 "pixel coordinates"를 요청해도
+  // 실제로는 0~1000 정규화 좌표를 반환합니다.
+  // 좌표가 0~1000 범위인지 픽셀 범위인지 자동 감지:
+  // - 모든 좌표값이 0~1000 이내이고
+  // - 실제 이미지 크기가 1000보다 크다면 → 정규화 좌표로 판단
+  const maxCoord = Math.max(ymin, xmin, ymax, xmax);
+  const isNormalized = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
+
+  let px_xmin, px_ymin, px_xmax, px_ymax;
+  if (isNormalized) {
+    px_xmin = (xmin / 1000) * naturalWidth;
+    px_ymin = (ymin / 1000) * naturalHeight;
+    px_xmax = (xmax / 1000) * naturalWidth;
+    px_ymax = (ymax / 1000) * naturalHeight;
+  } else {
+    px_xmin = xmin;
+    px_ymin = ymin;
+    px_xmax = xmax;
+    px_ymax = ymax;
+  }
+
+  const PAD = 2;
+  const x = Math.max(0, Math.round(px_xmin) - PAD);
+  const y = Math.max(0, Math.round(px_ymin) - PAD);
+  const x2 = Math.min(naturalWidth, Math.round(px_xmax) + PAD);
+  const y2 = Math.min(naturalHeight, Math.round(px_ymax) + PAD);
+  const width = x2 - x;
+  const height = y2 - y;
+
+  if (width <= 0 || height <= 0) return null;
+  return { x, y, width, height, _wasNormalized: isNormalized };
+}
+

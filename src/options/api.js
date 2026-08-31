@@ -28,3 +28,17 @@ export async function fetchOpenAIModels(apiKey) {
     })
     .sort();
 }
+
+export async function fetchCustomModels(apiUrl, apiKey) {
+  const url = apiUrl.replace(/\/+$/, "") + "/models";
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  return (data.data || []).map((m) => m.id).sort();
+}

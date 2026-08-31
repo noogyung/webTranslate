@@ -1,6 +1,7 @@
 import { state } from "./state.js";
 import { startTranslation, revertTranslation } from "./translation.js";
 import "./dictionary.js";
+import "./image/index.js";
 
 /* ────────────────────────────────────────────
    * 설정 실시간 업데이트 리스너 (팝업 메뉴용)

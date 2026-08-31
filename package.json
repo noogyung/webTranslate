@@ -6,8 +6,5 @@
   "scripts": {
     "package": "node scripts/package.js",
     "resize-icons": "powershell -ExecutionPolicy Bypass -File scripts/resize-icons.ps1"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
   }
 }

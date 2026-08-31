@@ -16,7 +16,7 @@ export function getLanguageName(code) {
   return LANGUAGE_NAMES[code] || code;
 }
 
-export const LLM_ENGINES = new Set(["gemini", "chatgpt", "openai", "claude", "ollama"]);
+export const LLM_ENGINES = new Set(["gemini", "chatgpt", "openai", "claude", "ollama", "custom"]);
 
 export function isLLMEngine(mode) {
   return LLM_ENGINES.has((mode || "").toLowerCase());

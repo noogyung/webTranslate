@@ -21,6 +21,7 @@ export function updateUI(mode) {
   const isClaude = mode === "claude";
   const isOllama = mode === "ollama";
   const isLibre = mode === "libre";
+  const isCustom = mode === "custom";
 
   const apiKeySection = document.getElementById("apiKeySection");
   const apiModelSection = document.getElementById("apiModelSection");
@@ -28,6 +29,7 @@ export function updateUI(mode) {
   const claudeSection = document.getElementById("claudeSection");
   const ollamaSection = document.getElementById("ollamaSection");
   const libreUrlSection = document.getElementById("libreUrlSection");
+  const customEngineSection = document.getElementById("customEngineSection");
 
   if (apiKeySection) apiKeySection.style.display = isGemini ? "block" : "none";
   if (apiModelSection) apiModelSection.style.display = isGemini ? "block" : "none";
@@ -35,6 +37,7 @@ export function updateUI(mode) {
   if (claudeSection) claudeSection.style.display = isClaude ? "block" : "none";
   if (ollamaSection) ollamaSection.style.display = isOllama ? "block" : "none";
   if (libreUrlSection) libreUrlSection.style.display = isLibre ? "block" : "none";
+  if (customEngineSection) customEngineSection.style.display = isCustom ? "" : "none";
 }
 
 export function hexToRgba(hex, alpha) {

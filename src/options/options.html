@@ -90,6 +90,15 @@
             <div class="mode-desc">개인 서버나 무료 API를 통해 번역합니다.</div>
           </div>
         </label>
+
+        <label class="mode-card" id="mode-custom">
+          <input type="radio" name="translationMode" value="custom" />
+          <div class="mode-card-inner">
+            <div class="mode-badge ai" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">API</div>
+            <div class="mode-name">커스텀 (OpenAI 호환)</div>
+            <div class="mode-desc">Groq, Together AI 등 OpenAI 호환 API 엔진.</div>
+          </div>
+        </label>
       </div>
 
       <!-- Gemini API Key -->
@@ -354,6 +363,112 @@
       </div>
     </section>
 
+    <!-- v2.0 이미지 번역 설정 -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/></svg>
+        이미지 번역 (v2.0)
+      </h2>
+
+      <!-- 기본 모드 -->
+      <div class="field-row">
+        <label class="field-label" for="imageTransMode">기본 모드</label>
+        <select id="imageTransMode" class="select-input">
+          <option value="ask">매번 묻기</option>
+          <option value="standard">항상 일반 (OCR → 오버레이)</option>
+          <option value="premium">항상 고급 (AI 이미지 합성)</option>
+        </select>
+      </div>
+
+      <!-- 고급 모드 구분선 -->
+      <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="font-size: 13px; color: #89b4fa; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
+          ⚡ 고급 모드 (AI 이미지 합성) 설정
+        </div>
+
+        <!-- 고급 모드 엔진 선택 -->
+        <div class="field-row">
+          <label class="field-label" for="imageTransPremiumEngine">이미지 합성 엔진</label>
+          <select id="imageTransPremiumEngine" class="select-input">
+            <option value="gemini">Gemini Image (유료 플랜 필요)</option>
+            <option value="openai">OpenAI GPT Image 2</option>
+          </select>
+        </div>
+
+        <!-- Gemini 고급 모드 설정 -->
+        <div id="premiumGeminiSection" style="margin-top: 14px;">
+          <div class="field-row">
+            <label class="field-label" for="premiumGeminiModel">Gemini 이미지 모델</label>
+            <input type="text" id="premiumGeminiModel" class="text-input"
+              value="gemini-3.1-flash-image"
+              placeholder="gemini-3.1-flash-image"
+              spellcheck="false" />
+          </div>
+          <p class="field-hint" style="margin-top: 6px;">
+            💡 <strong>Gemini API Key</strong>는 상단 <em>번역 모드 → Gemini AI</em> 섹션의 키를 그대로 사용합니다.<br>
+            모델: <code>gemini-3.1-flash-image</code> (~$0.02/장) · <code>gemini-3-pro-image</code> (~$0.13/장)<br>
+            ⚠️ 이미지 생성 API는 <strong>무료 티어 미지원</strong> — Google AI Studio에서 결제 활성화 필요
+          </p>
+        </div>
+
+        <!-- OpenAI 고급 모드 설정 -->
+        <div id="premiumOpenAISection" style="margin-top: 14px; display: none;">
+          <div class="field-row">
+            <label class="field-label" for="premiumOpenAIModel">OpenAI 이미지 모델</label>
+            <input type="text" id="premiumOpenAIModel" class="text-input"
+              value="gpt-image-2"
+              placeholder="gpt-image-2"
+              spellcheck="false" />
+          </div>
+          <p class="field-hint" style="margin-top: 6px;">
+            💡 <strong>OpenAI API Key</strong>는 상단 <em>번역 모드 → ChatGPT API</em> 섹션의 키를 그대로 사용합니다.<br>
+            모델: <code>gpt-image-2</code> (출력 토큰 기반 과금, ~$0.04/장)
+          </p>
+        </div>
+      </div>
+
+      <!-- 비용 알림 -->
+      <div style="margin-top: 14px;">
+        <label class="field-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #f8fafc; font-size: 14px;">
+          <input type="checkbox" id="imageCostNotify" style="width: 16px; height: 16px; accent-color: #818cf8;" checked />
+          고급 모드 비용 안내 알림 표시 (10회마다)
+        </label>
+      </div>
+
+      <p class="field-hint" style="margin-top: 14px;">
+        이미지 위에 마우스를 올리고 <kbd>Alt</kbd>+<kbd>S</kbd>를 눌러 번역합니다.
+        단축키는 <code>chrome://extensions/shortcuts</code>에서 변경 가능합니다.
+      </p>
+    </section>
+
+    <!-- v2.0 커스텀 엔진 설정 -->
+    <section class="card" id="customEngineSection" style="display: none;">
+      <h2 class="card-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        커스텀 엔진 설정 (OpenAI 호환)
+      </h2>
+      <p class="field-hint" style="margin-bottom: 12px;">Groq, Together AI, Fireworks 등 OpenAI 호환 API를 사용합니다.</p>
+
+      <div class="field-row">
+        <label class="field-label" for="customApiUrl">API 엔드포인트 URL</label>
+        <input type="url" id="customApiUrl" class="text-input" placeholder="https://api.groq.com/openai/v1" spellcheck="false" />
+      </div>
+
+      <div class="field-row" style="margin-top: 12px;">
+        <label class="field-label" for="customApiKey">API Key</label>
+        <input type="password" id="customApiKey" class="text-input" placeholder="gsk_..." autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="field-row" style="margin-top: 12px;">
+        <label class="field-label" for="customModel">모델명</label>
+        <div class="input-group">
+          <input type="text" id="customModel" class="text-input" list="customModelList" placeholder="qwen/qwen3.6-27b" spellcheck="false" />
+          <button type="button" id="loadCustomModelsBtn" class="btn-primary" style="white-space: nowrap; padding: 6px 12px; font-size: 13px;">가용 모델 조회</button>
+          <datalist id="customModelList"></datalist>
+        </div>
+      </div>
+    </section>
+
     <!-- 목표 언어 -->
     <section class="card">
       <h2 class="card-title">
@@ -481,6 +596,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/options/index.js"></script>
+  <script type="module" src="index.js"></script>
 </body>
 </html>

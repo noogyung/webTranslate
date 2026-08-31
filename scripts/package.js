@@ -6,24 +6,25 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
-const distDir = path.resolve(rootDir, "dist");
-
 // 1. manifest.json에서 버전 읽기
 const manifestPath = path.resolve(rootDir, "manifest.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 const version = manifest.version || "1.0.0";
+
+const buildRootDir = path.resolve(rootDir, "Build");
+const buildVersionDir = path.resolve(buildRootDir, version);
 const zipName = `web-translator-v${version}.zip`;
-const zipPath = path.resolve(distDir, zipName);
-const tempBuildDir = path.resolve(distDir, "temp_build");
+const zipPath = path.resolve(buildVersionDir, zipName);
+const tempBuildDir = path.resolve(buildVersionDir, "temp_build");
 
 console.log(`[Package] Web Translator v${version} 패키징 시작...`);
 
-// 2. dist 및 temp_build 초기화
+// 2. Build/{version} 및 temp_build 초기화
 if (fs.existsSync(tempBuildDir)) {
   fs.rmSync(tempBuildDir, { recursive: true, force: true });
 }
-if (!fs.existsSync(distDir)) {
-  fs.mkdirSync(distDir, { recursive: true });
+if (!fs.existsSync(buildVersionDir)) {
+  fs.mkdirSync(buildVersionDir, { recursive: true });
 }
 if (fs.existsSync(zipPath)) {
   fs.unlinkSync(zipPath);
@@ -34,11 +35,6 @@ fs.mkdirSync(tempBuildDir, { recursive: true });
 const includeItems = [
   "manifest.json",
   "_locales",
-  "content.css",
-  "optionPopup.css",
-  "optionPopup.html",
-  "options.css",
-  "options.html",
   "icons",
   "src"
 ];

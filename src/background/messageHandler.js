@@ -1,5 +1,5 @@
 import { handleTranslation, handleWordDictionary } from "./translationService.js";
-import { handleImageTranslation, handleBoundingBoxesLocation, fetchImageAsBase64 } from "./imageService.js";
+import { handleImageTranslation, handleBoundingBoxesLocation, handleStandardTranslation, handlePremiumTranslation, fetchImageAsBase64 } from "./imageService.js";
 import { DEFAULT_SETTINGS } from "../options/storage.js";
 
 export function initializeMessageHandlers() {
@@ -56,6 +56,20 @@ export function initializeMessageHandlers() {
     if (message.action === "locateBoundingBoxes") {
       handleBoundingBoxesLocation(message, _sender)
         .then((res) => sendResponse({ success: true, items: res }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    if (message.action === "translateStandard") {
+      handleStandardTranslation(message, _sender)
+        .then((blocks) => sendResponse({ success: true, blocks }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    if (message.action === "translatePremium") {
+      handlePremiumTranslation(message, _sender)
+        .then((dataUrl) => sendResponse({ success: true, dataUrl }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;
     }
