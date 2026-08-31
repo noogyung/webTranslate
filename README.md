@@ -104,12 +104,16 @@ Web Translator는 사용자의 쾌적한 다국어 웹서핑을 위해 전면 �
 
 <br>
 
-<a href="https://www.buymeacoffee.com/noogyung" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="38">
+<a href="https://github.com/sponsors/noogyung" target="_blank">
+  <img src="https://img.shields.io/badge/Sponsor-GitHub_Sponsors-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white" alt="GitHub Sponsors">
 </a>
-&nbsp;&nbsp;
+&nbsp;
+<a href="https://www.buymeacoffee.com/noogyung" target="_blank">
+  <img src="https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee">
+</a>
+&nbsp;
 <a href="https://paypal.me/NoogKim" target="_blank">
-  <img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal" height="38">
+  <img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal">
 </a>
 
 ---
