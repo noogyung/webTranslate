@@ -4,7 +4,7 @@
 
 import { getHoveredImage } from "./hoverManager.js";
 import { showModeDialog, getSavedModeForSite } from "./modeDialog.js";
-import { createCanvasOverlay, createImageOverlay, toggleOverlay } from "./overlayManager.js";
+import { createCanvasOverlay, createImageOverlay, upgradeToImageOverlay, toggleOverlay } from "./overlayManager.js";
 import { sendToBackground } from "../api.js";
 
 let isProcessing = false;
@@ -57,7 +57,7 @@ async function handleImageTranslation(img) {
     img.style.opacity = "0.5";
     img.style.transition = "opacity 0.2s";
 
-    // 이미지 Base64 가져오기
+    // ── Step A: 이미지 fetch + OCR 최적 해상도 압축 ──────────
     let imageUrl = img.src;
     if (!imageUrl.startsWith("data:")) {
       const fetchResult = await sendToBackground({
@@ -68,6 +68,9 @@ async function handleImageTranslation(img) {
       if (!fetchResult.success) throw new Error(fetchResult.error || "이미지 다운로드 실패");
       imageUrl = fetchResult.dataUrl;
     }
+
+    // OCR 정확도를 유지하는 최소 해상도(긴 축 1024px)로 압축
+    imageUrl = await compressBase64ForOcr(imageUrl, img.naturalWidth, img.naturalHeight);
 
     if (mode === "standard") {
       await handleStandardMode(img, imageUrl, settings);
@@ -83,6 +86,46 @@ async function handleImageTranslation(img) {
     img.style.transition = "";
     isProcessing = false;
   }
+}
+
+/* ── Step A: OCR 정확도 유지 최소 해상도 압축 ─────────────────
+ * 긴 축 기준 최대 1024px — Vision API OCR 정확도 유지 최솟값
+ * 이미 작은 이미지는 압축 없이 그대로 반환
+ * JPEG 92%: 텍스트 가독성 vs 전송 크기 최적 균형
+ * ─────────────────────────────────────────────────────────── */
+async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) {
+  const MAX_LONG_EDGE = 1024;
+
+  if (!naturalWidth || !naturalHeight) return base64DataUrl;
+
+  const longEdge = Math.max(naturalWidth, naturalHeight);
+  if (longEdge <= MAX_LONG_EDGE) {
+    console.log(`[WT Compress] 압축 불필요 (${naturalWidth}×${naturalHeight}px)`);
+    return base64DataUrl;
+  }
+
+  const scale = MAX_LONG_EDGE / longEdge;
+  const targetW = Math.round(naturalWidth * scale);
+  const targetH = Math.round(naturalHeight * scale);
+
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      canvas.getContext("2d").drawImage(image, 0, 0, targetW, targetH);
+      const compressed = canvas.toDataURL("image/jpeg", 0.92);
+      const ratio = Math.round(compressed.length / base64DataUrl.length * 100);
+      console.log(`[WT Compress] ${naturalWidth}×${naturalHeight} → ${targetW}×${targetH}px | 크기 ${ratio}%`);
+      resolve(compressed);
+    };
+    image.onerror = () => {
+      console.warn("[WT Compress] 압축 실패, 원본 사용");
+      resolve(base64DataUrl);
+    };
+    image.src = base64DataUrl;
+  });
 }
 
 async function handleStandardMode(img, imageUrl, settings) {
@@ -103,7 +146,7 @@ async function handleStandardMode(img, imageUrl, settings) {
   if (!result.success) throw new Error(result.error || "일반 모드 번역 실패");
   if (!result.blocks || result.blocks.length === 0) throw new Error("감지된 텍스트가 없습니다.");
 
-  // ── 디버깅: OCR + 번역 결과 콘솔 출력 ──────────────────────
+  // 디버깅: OCR + 번역 결과 콘솔 출력
   console.group(
     `%c[WT Image Debug] 일반 모드 OCR 결과 — ${result.blocks.length}개 블록 / 이미지 ${img.naturalWidth}×${img.naturalHeight}px`,
     "color: #89b4fa; font-weight: bold; font-size: 13px;"
@@ -127,35 +170,69 @@ async function handleStandardMode(img, imageUrl, settings) {
   );
   console.log("[WT Image Debug] 전체 블록 데이터:", result.blocks);
   console.groupEnd();
-  // ─────────────────────────────────────────────────────────────
 
   createCanvasOverlay(img, result.blocks);
 }
 
+/* ── 고급 모드: 낙관적 업데이트 (Step E) ──────────────────────
+ * 1. Step 1: OCR+번역(일반과 동일) → Canvas 오버레이 즉시 표시
+ * 2. Step 2: 번역 쌍 주입 → AI 이미지 합성 완료 시 교체
+ * ─────────────────────────────────────────────────────────── */
 async function handlePremiumMode(img, imageUrl, settings) {
-  const result = await sendToBackground({
-    action: "translatePremium",
+  const commonParams = {
     imageUrl,
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
     targetLang: settings.targetLang || "ko",
-    premiumEngine: settings.imageTransPremiumEngine || "gemini",
-    premiumModel: settings.imageTransPremiumModel || "gemini-3.1-flash-image",
-    // Step 1 OCR + 번역에 필요한 엔진 정보
     mode: settings.translationMode || "gemini",
     apiKey: settings.geminiApiKey || "",
     geminiModel: settings.geminiModel || "gemini-3.6-flash",
     openaiApiKey: settings.openaiApiKey || "",
     openaiModel: settings.openaiModel || "gpt-4o-mini",
     pageUrl: location.href,
+  };
+
+  // Step 1: OCR + 번역 → Canvas 즉시 표시
+  const standardResult = await sendToBackground({
+    action: "translateStandard",
+    ...commonParams,
   });
 
-  if (!result.success) throw new Error(result.error || "고급 모드 번역 실패");
-  if (!result.dataUrl) throw new Error("번역된 이미지가 반환되지 않았습니다.");
+  let translationPairs = [];
 
-  createImageOverlay(img, result.dataUrl);
+  if (standardResult.success && standardResult.blocks?.length > 0) {
+    createCanvasOverlay(img, standardResult.blocks);
+    translationPairs = standardResult.blocks
+      .filter(b => b.originalText?.trim() && b.translatedText?.trim())
+      .map(b => ({ original: b.originalText, translated: b.translatedText }));
+    console.log(`[WT Premium] Step 1 완료 (Canvas 표시) — ${translationPairs.length}개 번역 쌍`);
+  } else {
+    console.warn("[WT Premium] Step 1 OCR 실패, 번역 쌍 없이 이미지 합성 진행");
+  }
 
-  // 비용 안내 (10회마다)
+  // Canvas 표시된 상태에서 로딩 표시 해제
+  img.style.opacity = "";
+
+  // Step 2: 이미지 합성 (번역 쌍 주입)
+  const premiumResult = await sendToBackground({
+    action: "translatePremiumStep2",
+    imageUrl,
+    translationPairs,
+    targetLang: settings.targetLang || "ko",
+    premiumEngine: settings.imageTransPremiumEngine || "gemini",
+    premiumModel: settings.imageTransPremiumModel || "gemini-3.1-flash-image",
+    apiKey: settings.geminiApiKey || "",
+    openaiApiKey: settings.openaiApiKey || "",
+    pageUrl: location.href,
+  });
+
+  if (!premiumResult.success) throw new Error(premiumResult.error || "고급 모드 이미지 합성 실패");
+  if (!premiumResult.dataUrl) throw new Error("번역된 이미지가 반환되지 않았습니다.");
+
+  // Canvas → AI 합성 이미지로 교체
+  upgradeToImageOverlay(img, premiumResult.dataUrl);
+  console.log("[WT Premium] Step 2 완료 — AI 합성 이미지로 교체");
+
   if (settings.imageCostNotify !== false) {
     showCostNotificationIfNeeded(settings);
   }

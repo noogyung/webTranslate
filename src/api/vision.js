@@ -27,10 +27,10 @@ export async function translateImageWithVision({
     ? `The image dimensions are ${naturalWidth} pixels wide by ${naturalHeight} pixels high.\n`
     : "";
 
-  const ocrSystemInstruction = 
-    `You are a high-precision OCR Layout Analyzer for image translation.\n\n` +
+  const ocrSystemInstruction =
+    `You are a high-precision OCR Layout Analyzer and Translator for image translation.\n\n` +
     imageDimNotice +
-    `Detect every visible text block in the image and return layout information for accurate text replacement.\n\n` +
+    `Detect every visible text block in the image, extract its layout, and provide the ${langName} translation.\n\n` +
     `Rules:\n` +
     `- Detect all text regardless of language.\n` +
     `- Treat each independent text region as a separate object.\n` +
@@ -44,6 +44,7 @@ export async function translateImageWithVision({
     `- containerBox is the drawable region for translated text in actual pixel coordinates, or null if unavailable.\n` +
     `- Detect orientation: horizontal, vertical or rotated.\n` +
     `- Estimate textColor, backgroundColor and strokeColor when visible.\n` +
+    `- For "translatedText": translate the originalText to ${langName}. Preserve line breaks (\\n). Maintain natural, context-aware ${langName} phrasing.\n` +
     `- Return only valid JSON without markdown or explanation.\n\n` +
     `Output format:\n` +
     `[\n` +
@@ -60,6 +61,7 @@ export async function translateImageWithVision({
     `    ],\n` +
     `    "orientation":"horizontal|vertical|rotated",\n` +
     `    "originalText":"...",\n` +
+    `    "translatedText":"...(${langName} translation)...",\n` +
     `    "textColor":"#000000",\n` +
     `    "backgroundColor":"#FFFFFF",\n` +
     `    "strokeColor":"#000000"\n` +
@@ -142,32 +144,16 @@ export async function translateImageWithVision({
     return [];
   }
 
-  const originalTexts = ocrBlocks.map((b) => b.originalText || "");
-  let translations = [];
-
-  const transModelToUse = userSpecifiedModel || (mode === "openai" ? "gpt-4o-mini" : "gemini-3.6-flash");
-
-  try {
-    const transOptions = { isPopup: false, pageContext: true };
-    const transResult = await (mode === "openai"
-      ? translateWithOpenAI(originalTexts, targetLang, openaiApiKey || apiKey, transModelToUse, transOptions)
-      : translateWithGemini(originalTexts, targetLang, apiKey || openaiApiKey, geminiModel, transOptions));
-
-    translations = Array.isArray(transResult) ? transResult : (transResult.translations || []);
-  } catch (transErr) {
-    console.warn(`[WT Image Debug] Step 3 번역 실패 (${transModelToUse}), 원문 유지:`, transErr);
-    translations = originalTexts;
-  }
-
-  const finalBlocks = ocrBlocks.map((block, idx) => ({
+  // Step B: 1-Pass — OCR 결과의 translatedText 직접 사용 (2차 번역 API 불필요)
+  const finalBlocks = ocrBlocks.map((block) => ({
     ...block,
-    translatedText: translations[idx] || block.originalText || "",
+    translatedText: block.translatedText?.trim() || block.originalText || "",
     eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight),
     glyphBox: normalizeBox(block.glyphBox, naturalWidth, naturalHeight),
     containerBox: normalizeBox(block.containerBox, naturalWidth, naturalHeight),
   })).filter(b => b.eraseBox !== null);
 
-  console.group(`[WT Step 3] 이미지 텍스트 번역 완료 (비용 최적화 모델: ${transModelToUse})`);
+  console.group(`[WT Step 1-Pass] OCR+번역 완료 — ${finalBlocks.length}개 블록`);
   console.table(
     finalBlocks.map((b, idx) => ({
       Index: `#${idx}`,

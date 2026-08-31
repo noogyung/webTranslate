@@ -1,6 +1,27 @@
 import { translateImageWithVision, locateBoundingBoxesWithVision } from "../api/index.js";
 import { translatePremiumGemini, translatePremiumOpenAI, incrementImageCount } from "../api/imageTranslate.js";
 
+/* ── Step D: 세션 내 번역 결과 LRU 캐시 (최대 20개) ─────────── */
+const _translationCache = new Map();
+const CACHE_MAX = 20;
+
+function cacheGet(key) {
+  if (!_translationCache.has(key)) return null;
+  // LRU: hit 시 맨 뒤로 이동
+  const val = _translationCache.get(key);
+  _translationCache.delete(key);
+  _translationCache.set(key, val);
+  return val;
+}
+
+function cacheSet(key, val) {
+  if (_translationCache.has(key)) _translationCache.delete(key);
+  if (_translationCache.size >= CACHE_MAX) {
+    _translationCache.delete(_translationCache.keys().next().value);
+  }
+  _translationCache.set(key, val);
+}
+
 export async function handleBoundingBoxesLocation(message, sender) {
   let base64DataUrl = message.imageUrl;
   if (!base64DataUrl.startsWith("data:")) {
@@ -51,6 +72,14 @@ export async function handleImageTranslation(message, sender) {
 }
 
 export async function handleStandardTranslation(message, sender) {
+  // Step D: 캐시 조회 (URL + targetLang 키)
+  const cacheKey = `${message.imageUrl}::${message.targetLang || "ko"}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    console.log("[WT Cache] 캐시 HIT — 즉시 반환");
+    return cached;
+  }
+
   let base64DataUrl = message.imageUrl;
 
   if (!base64DataUrl.startsWith("data:")) {
@@ -70,6 +99,7 @@ export async function handleStandardTranslation(message, sender) {
     targetLang: message.targetLang || "ko",
   });
 
+  cacheSet(cacheKey, result);
   await incrementImageCount("standard");
   return result;
 }
@@ -118,6 +148,41 @@ export async function handlePremiumTranslation(message, sender) {
 
   console.log(`[WT Premium] Step 2: ${engine} 이미지 합성 (번역 쌍 ${translationPairs.length}개 주입)`);
 
+  if (engine === "openai") {
+    translatedDataUrl = await translatePremiumOpenAI({
+      base64DataUrl,
+      apiKey: message.openaiApiKey || "",
+      model: message.premiumModel || "gpt-image-2",
+      targetLang: message.targetLang || "ko",
+      translationPairs,
+    });
+  } else {
+    translatedDataUrl = await translatePremiumGemini({
+      base64DataUrl,
+      apiKey: message.apiKey || "",
+      model: message.premiumModel || "gemini-3.1-flash-image",
+      targetLang: message.targetLang || "ko",
+      translationPairs,
+    });
+  }
+
+  await incrementImageCount("premium");
+  return translatedDataUrl;
+}
+
+/* ── Step E: 이미지 합성 전용 (translationPairs 이미 확보된 상태) */
+export async function handlePremiumStep2Translation(message, sender) {
+  let base64DataUrl = message.imageUrl;
+
+  if (!base64DataUrl.startsWith("data:")) {
+    const refererUrl = message.pageUrl || sender?.tab?.url || "";
+    base64DataUrl = await fetchImageAsBase64(message.imageUrl, refererUrl);
+  }
+
+  const engine = message.premiumEngine || "gemini";
+  const translationPairs = message.translationPairs || [];
+
+  let translatedDataUrl;
   if (engine === "openai") {
     translatedDataUrl = await translatePremiumOpenAI({
       base64DataUrl,

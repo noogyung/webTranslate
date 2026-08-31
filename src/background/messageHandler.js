@@ -1,5 +1,5 @@
 import { handleTranslation, handleWordDictionary } from "./translationService.js";
-import { handleImageTranslation, handleBoundingBoxesLocation, handleStandardTranslation, handlePremiumTranslation, fetchImageAsBase64 } from "./imageService.js";
+import { handleImageTranslation, handleBoundingBoxesLocation, handleStandardTranslation, handlePremiumTranslation, handlePremiumStep2Translation, fetchImageAsBase64 } from "./imageService.js";
 import { DEFAULT_SETTINGS } from "../options/storage.js";
 
 export function initializeMessageHandlers() {
@@ -69,6 +69,13 @@ export function initializeMessageHandlers() {
 
     if (message.action === "translatePremium") {
       handlePremiumTranslation(message, _sender)
+        .then((dataUrl) => sendResponse({ success: true, dataUrl }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    if (message.action === "translatePremiumStep2") {
+      handlePremiumStep2Translation(message, _sender)
         .then((dataUrl) => sendResponse({ success: true, dataUrl }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;

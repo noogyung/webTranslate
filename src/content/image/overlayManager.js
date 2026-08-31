@@ -77,6 +77,46 @@ export function createImageOverlay(img, translatedDataUrl) {
 }
 
 /**
+ * Canvas 오버레이 → AI 합성 이미지로 업그레이드 (낙관적 업데이트 Step E).
+ * @param {HTMLImageElement} img - 원본 이미지
+ * @param {string} translatedDataUrl - 번역된 이미지 dataURL
+ */
+export function upgradeToImageOverlay(img, translatedDataUrl) {
+  const wrapper = img.closest(`.${OVERLAY_CLASS}`);
+
+  if (!wrapper) {
+    // 래퍼가 없으면 새로 생성
+    createImageOverlay(img, translatedDataUrl);
+    return;
+  }
+
+  // 기존 Canvas 오버레이 제거
+  wrapper.querySelectorAll(".wt-image-overlay-canvas").forEach(el => el.remove());
+
+  // AI 이미지 오버레이 삽입
+  const imgCs = window.getComputedStyle(img);
+  const overlay = document.createElement("img");
+  overlay.className = "wt-image-overlay-img";
+  overlay.src = translatedDataUrl;
+  overlay.style.cssText = `
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: ${imgCs.objectFit || "fill"};
+    object-position: ${imgCs.objectPosition || "50% 50%"};
+    z-index: 1;
+    pointer-events: none;
+  `;
+
+  wrapper.appendChild(overlay);
+
+  img.dataset.wtImageTranslated = "premium";
+  img.dataset.wtShowingTranslated = "true";
+
+  // 토글 버튼 재생성 (premium 상태로)
+  createToggleButtons(wrapper, img);
+}
+
+/**
  * 원본/번역 토글.
  */
 export function toggleOverlay(img) {
