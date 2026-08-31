@@ -104,6 +104,10 @@ Web Translator는 사용자의 쾌적한 다국어 웹서핑을 위해 전면 �
 
 <br>
 
+<a href="https://www.buymeacoffee.com/noogyung" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="38">
+</a>
+&nbsp;&nbsp;
 <a href="https://paypal.me/NoogKim" target="_blank">
   <img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal" height="38">
 </a>
