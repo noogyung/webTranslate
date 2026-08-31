@@ -93,6 +93,12 @@ npm run package
 ```
 * `Build/WebTranslator_v{version}.zip` 파일이 생성됩니다.
 
+### Git 자동 동기화 (커밋 및 푸시)
+```bash
+npm run sync
+```
+* 버전 감지, 빌드 무결성 검증, 커밋 및 원격 브랜치 푸시를 일괄 처리합니다.
+
 ---
 
 ## 💖 후원 (Donation)

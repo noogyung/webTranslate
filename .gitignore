@@ -3,3 +3,17 @@ node_modules/
 *.log
 dist/
 Build/
+
+# Environment variables & Local Secrets
+.env
+.env.*
+*.local
+*.local.*
+secrets/
+*.key
+*.pem
+
+# OS / Editor temporary files
+Thumbs.db
+*.tmp
+*.swp
