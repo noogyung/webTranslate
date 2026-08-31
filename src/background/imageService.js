@@ -82,8 +82,41 @@ export async function handlePremiumTranslation(message, sender) {
     base64DataUrl = await fetchImageAsBase64(message.imageUrl, refererUrl);
   }
 
+  // ── Step 1: OCR + 텍스트 번역으로 번역 쌍 확보 ─────────────
+  let translationPairs = [];
+  try {
+    console.log("[WT Premium] Step 1: OCR + 텍스트 번역 시작...");
+    const ocrBlocks = await translateImageWithVision({
+      base64DataUrl,
+      naturalWidth: message.naturalWidth || 0,
+      naturalHeight: message.naturalHeight || 0,
+      mode: message.mode || "gemini",
+      apiKey: message.apiKey || "",
+      geminiModel: message.geminiModel || "gemini-3.6-flash",
+      openaiApiKey: message.openaiApiKey || "",
+      openaiModel: message.openaiModel || "gpt-4o-mini",
+      targetLang: message.targetLang || "ko",
+    });
+
+    translationPairs = ocrBlocks
+      .filter(b => b.originalText?.trim() && b.translatedText?.trim())
+      .map(b => ({ original: b.originalText, translated: b.translatedText }));
+
+    console.log(`[WT Premium] Step 1 완료: ${translationPairs.length}개 번역 쌍 확보`);
+    console.table(translationPairs.map((p, i) => ({
+      "#": i,
+      원문: p.original.substring(0, 30),
+      번역: p.translated.substring(0, 30),
+    })));
+  } catch (ocrErr) {
+    console.warn("[WT Premium] Step 1 OCR 실패 — 직접 번역(폴백)으로 진행:", ocrErr.message);
+  }
+
+  // ── Step 2: 번역 쌍 주입 후 이미지 합성 ────────────────────
   const engine = message.premiumEngine || "gemini";
   let translatedDataUrl;
+
+  console.log(`[WT Premium] Step 2: ${engine} 이미지 합성 (번역 쌍 ${translationPairs.length}개 주입)`);
 
   if (engine === "openai") {
     translatedDataUrl = await translatePremiumOpenAI({
@@ -91,6 +124,7 @@ export async function handlePremiumTranslation(message, sender) {
       apiKey: message.openaiApiKey || "",
       model: message.premiumModel || "gpt-image-2",
       targetLang: message.targetLang || "ko",
+      translationPairs,
     });
   } else {
     translatedDataUrl = await translatePremiumGemini({
@@ -98,6 +132,7 @@ export async function handlePremiumTranslation(message, sender) {
       apiKey: message.apiKey || "",
       model: message.premiumModel || "gemini-3.1-flash-image",
       targetLang: message.targetLang || "ko",
+      translationPairs,
     });
   }
 

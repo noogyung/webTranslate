@@ -8,29 +8,55 @@ const IMAGE_STATS_KEY = "wtImageStats";
 
 /**
  * 고급 모드 프롬프트 생성.
+ * @param {string} targetLang - 목표 언어 코드
+ * @param {Array<{original:string, translated:string}>} translationPairs - 사전 번역 쌍 (있으면 AI 재번역 방지)
  */
-export function buildWebtoonPrompt(targetLang) {
+export function buildWebtoonPrompt(targetLang, translationPairs = []) {
   const langName = getLanguageName(targetLang);
-  return `You are a professional manga/webtoon translator and typesetter.\n` +
-    `Translate ALL text in this image to ${langName}.\n\n` +
-    `CRITICAL RULES:\n` +
-    `- Replace every speech bubble, narration box, SFX, and caption text with the translated ${langName} text.\n` +
+
+  let prompt = `You are a professional manga/webtoon image editor and typesetter.\n\n`;
+
+  if (translationPairs.length > 0) {
+    // 2단계 모드: 이미 번역된 텍스트를 그대로 사용 (재번역 금지)
+    prompt +=
+      `The following text translations have been pre-determined by a professional translation engine.\n` +
+      `You MUST use EXACTLY these ${langName} translations — do NOT re-translate, paraphrase, or modify them:\n\n`;
+
+    translationPairs.forEach((pair, i) => {
+      const orig = pair.original.replace(/\n/g, "\\n");
+      const trans = pair.translated.replace(/\n/g, "\\n");
+      prompt += `[${i}] "${orig}" → "${trans}"\n`;
+    });
+
+    prompt +=
+      `\nReplace each original text in the image with its corresponding ${langName} translation EXACTLY as listed above.\n` +
+      `If a text block is not in the list, leave it unchanged.\n`;
+  } else {
+    // 폴백: 직접 번역 (translationPairs 없을 때만)
+    prompt += `Translate ALL text in this image to ${langName}.\n`;
+  }
+
+  prompt +=
+    `\nCRITICAL RULES:\n` +
     `- PRESERVE the original art, backgrounds, character drawings, and panel layout EXACTLY.\n` +
     `- Match the original font style, size, weight, and color as closely as possible.\n` +
-    `- For SFX (sound effects): Translate AND match the artistic style (bold, stylized, rotated).\n` +
-    `- For transparent/semi-transparent text backgrounds: Maintain the same transparency level.\n` +
-    `- Text must fit within the original text boundaries without overflow.\n` +
-    `- Do NOT add any watermarks, borders, or artifacts.\n` +
+    `- For SFX (sound effects): Match the original artistic style (bold, stylized, rotated).\n` +
+    `- For transparent/semi-transparent backgrounds: Maintain the same transparency.\n` +
+    `- Text must fit within the original bubble/box boundaries without overflow.\n` +
+    `- Do NOT add watermarks, borders, or artifacts.\n` +
     `- Output ONLY the modified image with no other content.`;
+
+  return prompt;
 }
 
 /**
  * 고급 모드: Gemini Image-to-Image 번역.
+ * @param {Array} translationPairs - 사전 번역 쌍 (2단계 파이프라인)
  */
-export async function translatePremiumGemini({ base64DataUrl, apiKey, model, targetLang }) {
+export async function translatePremiumGemini({ base64DataUrl, apiKey, model, targetLang, translationPairs = [] }) {
   const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
   const base64Data = base64DataUrl.split(",")[1];
-  const prompt = buildWebtoonPrompt(targetLang);
+  const prompt = buildWebtoonPrompt(targetLang, translationPairs);
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
@@ -91,9 +117,10 @@ export async function translatePremiumGemini({ base64DataUrl, apiKey, model, tar
 
 /**
  * 고급 모드: OpenAI GPT Image 2 번역.
+ * @param {Array} translationPairs - 사전 번역 쌍 (2단계 파이프라인)
  */
-export async function translatePremiumOpenAI({ base64DataUrl, apiKey, model, targetLang }) {
-  const prompt = buildWebtoonPrompt(targetLang);
+export async function translatePremiumOpenAI({ base64DataUrl, apiKey, model, targetLang, translationPairs = [] }) {
+  const prompt = buildWebtoonPrompt(targetLang, translationPairs);
 
   // base64를 Blob으로 변환
   const base64Data = base64DataUrl.split(",")[1];

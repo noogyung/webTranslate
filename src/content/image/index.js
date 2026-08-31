@@ -136,11 +136,17 @@ async function handlePremiumMode(img, imageUrl, settings) {
   const result = await sendToBackground({
     action: "translatePremium",
     imageUrl,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
     targetLang: settings.targetLang || "ko",
     premiumEngine: settings.imageTransPremiumEngine || "gemini",
     premiumModel: settings.imageTransPremiumModel || "gemini-3.1-flash-image",
+    // Step 1 OCR + 번역에 필요한 엔진 정보
+    mode: settings.translationMode || "gemini",
     apiKey: settings.geminiApiKey || "",
+    geminiModel: settings.geminiModel || "gemini-3.6-flash",
     openaiApiKey: settings.openaiApiKey || "",
+    openaiModel: settings.openaiModel || "gpt-4o-mini",
     pageUrl: location.href,
   });
 
