@@ -17,3 +17,6 @@ secrets/
 Thumbs.db
 *.tmp
 *.swp
+
+# Site verification files
+google*.html
