@@ -81,7 +81,7 @@ WebTranslator/
 
 1. 본 저장소를 클론하거나 다운로드합니다.
    ```bash
-   git clone https://github.com/your-username/WebTranslator.git
+   git clone https://github.com/noogyung/webTranslate.git
    ```
 2. Chrome 브라우저에서 `chrome://extensions/`로 이동합니다.
 3. 우측 상단의 **'개발자 모드'**를 활성화합니다.
