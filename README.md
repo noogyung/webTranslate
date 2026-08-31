@@ -102,6 +102,12 @@ Web Translator는 사용자의 쾌적한 다국어 웹서핑을 위해 전면 �
 * 확장 프로그램이 유용하셨다면 개발자에게 따뜻한 밥 한 끼나 커피 한 잔 사주시는 마음으로 응원해주시면 큰 힘이 됩니다.
 * 별도의 후원자 전용 혜택이나 기능 차등은 없으며, 순수한 응원과 격려로 감사히 받겠습니다.
 
+<br>
+
+<a href="https://www.buymeacoffee.com/noogyung" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="45" width="162">
+</a>
+
 ---
 
 ## 📄 라이선스 (License)
