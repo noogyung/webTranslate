@@ -1,10 +1,24 @@
 # Web Translator 🌐
 
 > 웹페이지의 원본 레이아웃을 해치지 않고 직관적인 인라인 번역과 단어/문장 사전을 제공하는 Chrome 확장 프로그램 (Manifest V3)
+>
+> 🚀 **현재 개발 버전 (`v2.0-dev`)**: **호버 기반 이미지 텍스트 번역 (Image Translation)** 기능 집중 개발 중 ([로드맵 보기](docs/WEBTRANSLATOR_2.0_ROADMAP.md))
 
 ---
 
-## 📌 주요 기능 (Key Features)
+## 🎨 Web Translator 2.0 신규 기능 (개발 진행 중)
+
+* **마우스 호버 기반 이미지 번역**
+  * 웹페이지 내 이미지에 마우스를 올리면 우측 상단에 `[번역]` 플로팅 버튼 자동 노출.
+  * 번역 완료 후 원본 이미지와 번역본을 자유롭게 전환하는 `[원본 보기]` / `[번역 보기]` 원터치 토글 지원.
+* **Gemini 2.0 Flash Multimodal Native 비전 파이프라인**
+  * 무거운 클라이언트 WASM/OCR 모델을 배제하고 Gemini 비전 API를 활용한 초경량·고정밀 텍스트 추출 및 번역.
+* **DPR / CSS Transform 보정 정밀 Canvas 오버레이**
+  * 브라우저 DPR(Device Pixel Ratio), `object-fit`, `transform: scale()`을 정밀 계산하여 이미지 내 글자 위치를 1:1 완벽 정렬.
+
+---
+
+## 📌 주요 기능 (Key Features - v1.0.0 완비)
 
 1. **페이지 전체 인라인 번역 (`Alt + A`)**
    - 웹페이지 구조를 파괴하지 않고 `원문(번역문)` 형태로 직관적인 인라인 렌더링을 제공합니다.
