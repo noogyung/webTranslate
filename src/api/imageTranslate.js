@@ -75,7 +75,7 @@ export async function translatePremiumGemini({ base64DataUrl, apiKey, model, tar
         temperature: 0.2
       }
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   });
 
   if (!response.ok) {
@@ -141,7 +141,7 @@ export async function translatePremiumOpenAI({ base64DataUrl, apiKey, model, tar
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   });
 
   if (!response.ok) {

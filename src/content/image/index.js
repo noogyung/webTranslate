@@ -28,55 +28,66 @@ chrome.runtime.onMessage.addListener((message) => {
   handleImageTranslation(img);
 });
 
+/* ── 단계별 타이밍 로거 ──────────────────────────────────────── */
+function wtTimer(label) {
+  const start = performance.now();
+  return () => {
+    const ms = Math.round(performance.now() - start);
+    console.log(`%c[WT Timing] ${label}: ${ms}ms`, "color: #a6e3a1; font-weight: bold;");
+    return ms;
+  };
+}
+
 async function handleImageTranslation(img) {
   isProcessing = true;
+  const t0 = performance.now();
+  console.group("%c[WT Image] 번역 시작", "color: #89b4fa; font-weight: bold;");
 
   try {
-    // 설정 가져오기
+    let tEnd = wtTimer("설정 로드");
     const settings = await sendToBackground({ action: "getSettings" });
+    tEnd();
 
     let mode = null;
-
     if (settings.imageTransMode && settings.imageTransMode !== "ask") {
       mode = settings.imageTransMode;
     } else {
       const savedMode = await getSavedModeForSite(location.hostname);
-      if (savedMode) {
-        mode = savedMode;
-      } else {
-        mode = await showModeDialog();
-      }
+      mode = savedMode || await showModeDialog();
     }
 
-    if (!mode) {
-      isProcessing = false;
-      return;
-    }
+    if (!mode) { isProcessing = false; console.groupEnd(); return; }
 
-    // 로딩 상태 표시
     img.style.opacity = "0.5";
     img.style.transition = "opacity 0.2s";
 
-    // ── Step A: 이미지 fetch + OCR 최적 해상도 압축 ──────────
+    // ── 이미지 Fetch ──────────────────────────────────────────
     let imageUrl = img.src;
     if (!imageUrl.startsWith("data:")) {
+      tEnd = wtTimer("이미지 다운로드 (fetchBase64)");
       const fetchResult = await sendToBackground({
         action: "fetchBase64",
         imageUrl: img.src,
         pageUrl: location.href,
       });
+      tEnd();
       if (!fetchResult.success) throw new Error(fetchResult.error || "이미지 다운로드 실패");
       imageUrl = fetchResult.dataUrl;
     }
 
-    // OCR 정확도를 유지하는 최소 해상도(긴 축 1024px)로 압축
+    // ── 이미지 압축 (긴 축 1024px) ───────────────────────────
+    tEnd = wtTimer("이미지 압축 (compressBase64ForOcr)");
     imageUrl = await compressBase64ForOcr(imageUrl, img.naturalWidth, img.naturalHeight);
+    tEnd();
 
     if (mode === "standard") {
       await handleStandardMode(img, imageUrl, settings);
     } else if (mode === "premium") {
       await handlePremiumMode(img, imageUrl, settings);
     }
+
+    const total = Math.round(performance.now() - t0);
+    console.log(`%c[WT Timing] ✅ 전체 완료: ${total}ms`, "color: #cba6f7; font-size: 13px; font-weight: bold;");
 
   } catch (err) {
     console.error("[WT Image] 번역 오류:", err);
@@ -85,17 +96,15 @@ async function handleImageTranslation(img) {
     img.style.opacity = "";
     img.style.transition = "";
     isProcessing = false;
+    console.groupEnd();
   }
 }
-
-/* ── Step A: OCR 정확도 유지 최소 해상도 압축 ─────────────────
- * 긴 축 기준 최대 1024px — Vision API OCR 정확도 유지 최솟값
- * 이미 작은 이미지는 압축 없이 그대로 반환
- * JPEG 92%: 텍스트 가독성 vs 전송 크기 최적 균형
+/* ── OCR 정확도 유지 최소 해상도 압축 ─────────────────────────
+ * 긴 축 1024px: Vision API OCR 정확도 유지 최솟값
+ * 이미 작은 이미지는 그대로 반환
  * ─────────────────────────────────────────────────────────── */
 async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) {
   const MAX_LONG_EDGE = 1024;
-
   if (!naturalWidth || !naturalHeight) return base64DataUrl;
 
   const longEdge = Math.max(naturalWidth, naturalHeight);
@@ -120,15 +129,13 @@ async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) 
       console.log(`[WT Compress] ${naturalWidth}×${naturalHeight} → ${targetW}×${targetH}px | 크기 ${ratio}%`);
       resolve(compressed);
     };
-    image.onerror = () => {
-      console.warn("[WT Compress] 압축 실패, 원본 사용");
-      resolve(base64DataUrl);
-    };
+    image.onerror = () => { console.warn("[WT Compress] 압축 실패, 원본 사용"); resolve(base64DataUrl); };
     image.src = base64DataUrl;
   });
 }
 
 async function handleStandardMode(img, imageUrl, settings) {
+  const tEnd = wtTimer("OCR + 1-Pass 번역 (translateStandard)");
   const result = await sendToBackground({
     action: "translateStandard",
     imageUrl,
@@ -142,14 +149,14 @@ async function handleStandardMode(img, imageUrl, settings) {
     openaiModel: settings.openaiModel || "gpt-4o-mini",
     pageUrl: location.href,
   });
+  tEnd();
 
   if (!result.success) throw new Error(result.error || "일반 모드 번역 실패");
   if (!result.blocks || result.blocks.length === 0) throw new Error("감지된 텍스트가 없습니다.");
 
-  // 디버깅: OCR + 번역 결과 콘솔 출력
   console.group(
-    `%c[WT Image Debug] 일반 모드 OCR 결과 — ${result.blocks.length}개 블록 / 이미지 ${img.naturalWidth}×${img.naturalHeight}px`,
-    "color: #89b4fa; font-weight: bold; font-size: 13px;"
+    `%c[WT Debug] OCR 결과 — ${result.blocks.length}개 블록 / ${img.naturalWidth}×${img.naturalHeight}px`,
+    "color: #89b4fa; font-weight: bold;"
   );
   console.table(
     result.blocks.map((b, i) => {
@@ -158,80 +165,44 @@ async function handleStandardMode(img, imageUrl, settings) {
         "#": i,
         원문: b.originalText?.substring(0, 40),
         번역: b.translatedText?.substring(0, 40),
-        "X(px)": box.x ?? "?",
-        "Y(px)": box.y ?? "?",
-        "W(px)": box.width ?? "?",
-        "H(px)": box.height ?? "?",
-        좌표변환: box._wasNormalized ? "0~1000→px" : "원본px",
-        타입: b.type || "-",
-        방향: b.orientation || "-",
+        "X(px)": box.x ?? "?", "Y(px)": box.y ?? "?",
+        "W(px)": box.width ?? "?", "H(px)": box.height ?? "?",
+        좌표: box._wasNormalized ? "0~1000→px" : "원본px",
+        타입: b.type || "-", 방향: b.orientation || "-",
       };
     })
   );
-  console.log("[WT Image Debug] 전체 블록 데이터:", result.blocks);
   console.groupEnd();
 
+  const tRender = wtTimer("Canvas 렌더링");
   createCanvasOverlay(img, result.blocks);
+  tRender();
 }
 
-/* ── 고급 모드: 낙관적 업데이트 (Step E) ──────────────────────
- * 1. Step 1: OCR+번역(일반과 동일) → Canvas 오버레이 즉시 표시
- * 2. Step 2: 번역 쌍 주입 → AI 이미지 합성 완료 시 교체
- * ─────────────────────────────────────────────────────────── */
+/* ── 고급 모드: 단순 단일 호출 (낙관적 업데이트 없음) ─────────── */
 async function handlePremiumMode(img, imageUrl, settings) {
-  const commonParams = {
+  const tEnd = wtTimer("고급 모드 전체 (OCR + 이미지 합성)");
+  const result = await sendToBackground({
+    action: "translatePremium",
     imageUrl,
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
     targetLang: settings.targetLang || "ko",
+    premiumEngine: settings.imageTransPremiumEngine || "gemini",
+    premiumModel: settings.imageTransPremiumModel || "gemini-3.1-flash-image",
     mode: settings.translationMode || "gemini",
     apiKey: settings.geminiApiKey || "",
     geminiModel: settings.geminiModel || "gemini-3.6-flash",
     openaiApiKey: settings.openaiApiKey || "",
     openaiModel: settings.openaiModel || "gpt-4o-mini",
     pageUrl: location.href,
-  };
-
-  // Step 1: OCR + 번역 → Canvas 즉시 표시
-  const standardResult = await sendToBackground({
-    action: "translateStandard",
-    ...commonParams,
   });
+  tEnd();
 
-  let translationPairs = [];
+  if (!result.success) throw new Error(result.error || "고급 모드 번역 실패");
+  if (!result.dataUrl) throw new Error("번역된 이미지가 반환되지 않았습니다.");
 
-  if (standardResult.success && standardResult.blocks?.length > 0) {
-    createCanvasOverlay(img, standardResult.blocks);
-    translationPairs = standardResult.blocks
-      .filter(b => b.originalText?.trim() && b.translatedText?.trim())
-      .map(b => ({ original: b.originalText, translated: b.translatedText }));
-    console.log(`[WT Premium] Step 1 완료 (Canvas 표시) — ${translationPairs.length}개 번역 쌍`);
-  } else {
-    console.warn("[WT Premium] Step 1 OCR 실패, 번역 쌍 없이 이미지 합성 진행");
-  }
-
-  // Canvas 표시된 상태에서 로딩 표시 해제
-  img.style.opacity = "";
-
-  // Step 2: 이미지 합성 (번역 쌍 주입)
-  const premiumResult = await sendToBackground({
-    action: "translatePremiumStep2",
-    imageUrl,
-    translationPairs,
-    targetLang: settings.targetLang || "ko",
-    premiumEngine: settings.imageTransPremiumEngine || "gemini",
-    premiumModel: settings.imageTransPremiumModel || "gemini-3.1-flash-image",
-    apiKey: settings.geminiApiKey || "",
-    openaiApiKey: settings.openaiApiKey || "",
-    pageUrl: location.href,
-  });
-
-  if (!premiumResult.success) throw new Error(premiumResult.error || "고급 모드 이미지 합성 실패");
-  if (!premiumResult.dataUrl) throw new Error("번역된 이미지가 반환되지 않았습니다.");
-
-  // Canvas → AI 합성 이미지로 교체
-  upgradeToImageOverlay(img, premiumResult.dataUrl);
-  console.log("[WT Premium] Step 2 완료 — AI 합성 이미지로 교체");
+  createImageOverlay(img, result.dataUrl);
 
   if (settings.imageCostNotify !== false) {
     showCostNotificationIfNeeded(settings);

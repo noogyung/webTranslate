@@ -20,3 +20,8 @@ Thumbs.db
 
 # Site verification files
 google*.html
+
+# Binary / executable files
+*.exe
+*.dll
+*.bin
