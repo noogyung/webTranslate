@@ -95,22 +95,34 @@ export async function handleStandardTranslation(message, sender) {
   let result;
 
   if (engine === "free") {
-    // Free: PP-OCRv6 WASM (content script 측에서 처리, 여기서는 타임아웃 없이 패스)
-    // content script가 직접 오버레이 렌더링까지 처리하므로 background는 번역만 담당
-    // message.ocrBlocks = [{text, bbox}] 형식으로 이미 받은 상태
-    const settings = await getSettings();
-    const texts = (message.ocrBlocks || [])
-      .map(b => cleanOcrTextForTranslation(b.text))
-      .filter(t => t.length > 0);
-
-    const translations = await translateTextArray(texts, settings);
-
-    result = (message.ocrBlocks || []).map((block, i) => ({
-      originalText: block.text,
-      translatedText: translations[i] || block.text,
-      eraseBox: block.bbox,
-      orientation: "horizontal",
-    }));
+    // ocrBlocks가 있으면 → WASM OCR 결과를 메인 번역기로 위임
+    // ocrBlocks가 없으면 → PP-OCRv6 WASM 미구현 상태: Gemini Vision 1-Pass로 폴백
+    if (message.ocrBlocks && message.ocrBlocks.length > 0) {
+      const settings = await getSettings();
+      const texts = message.ocrBlocks
+        .map(b => cleanOcrTextForTranslation(b.text))
+        .filter(t => t.length > 0);
+      const translations = await translateTextArray(texts, settings);
+      result = message.ocrBlocks.map((block, i) => ({
+        originalText: block.text,
+        translatedText: translations[i] || block.text,
+        eraseBox: block.bbox,
+        orientation: "horizontal",
+      }));
+    } else {
+      // WASM OCR 미구현 → Gemini Vision 1-Pass 폴백
+      console.warn("[WT] Free 엔진: WASM OCR 미구현 → Gemini Vision 1-Pass 폴백");
+      const settings = await getSettings();
+      result = await translateImageWithVision({
+        base64DataUrl,
+        naturalWidth: message.naturalWidth,
+        naturalHeight: message.naturalHeight,
+        mode: "gemini",
+        apiKey: settings.geminiApiKey || "",
+        geminiModel: settings.imageStdGeminiModel || settings.geminiModel || "",
+        targetLang: message.targetLang || "ko",
+      });
+    }
 
   } else if (engine === "other" && message.imageStdOtherType === "ocr_server") {
     // Other [OCR 서버] 방식: 사설 OCR 서버 → 메인 번역기 위임
