@@ -67,10 +67,9 @@ export async function handleImageTranslation(message, sender) {
     base64DataUrl,
     mode: message.mode || "gemini",
     apiKey: message.apiKey || "",
-    geminiModel: message.geminiModel || "gemini-3.6-flash",
+    geminiModel: message.geminiModel || "",
     openaiApiKey: message.openaiApiKey || "",
     openaiModel: openaiModel,
-    userSpecifiedModel: message.openaiModel || "",
     targetLang: message.targetLang || "ko",
   });
 }

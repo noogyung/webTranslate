@@ -2,7 +2,7 @@
  * 이미지 번역 API (고급/일반 공통)
  * ──────────────────────────────────────────── */
 
-import { getLanguageName } from './constants.js';
+import { getLanguageName } from '../constants.js';
 
 const IMAGE_STATS_KEY = "wtImageStats";
 
