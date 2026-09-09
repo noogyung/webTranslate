@@ -9,6 +9,37 @@ import { getSettings } from "../options/storage.js";
 const _translationCache = new Map();
 const CACHE_MAX = 20;
 
+/* ── 압축 좌표계 → 원본 좌표계 스케일업 ──────────────────────
+ * vision API는 압축본(compressedWidth×compressedHeight)을 기준으로
+ * 정규화 좌표를 px로 역변환하므로, 원본 치수로 다시 스케일업 필요.
+ * compressedWidth/Height가 없으면 noop.
+ * ─────────────────────────────────────────────────────────── */
+function scaleBlocksToOriginal(blocks, message) {
+  const cw = message.compressedWidth;
+  const ch = message.compressedHeight;
+  const nw = message.naturalWidth;
+  const nh = message.naturalHeight;
+  if (!cw || !ch || !nw || !nh || (cw === nw && ch === nh)) return blocks;
+
+  const sx = nw / cw; // x 스케일 팩터
+  const sy = nh / ch; // y 스케일 팩터
+
+  return (blocks || []).map(block => {
+    if (!block.eraseBox) return block;
+    const b = block.eraseBox;
+    return {
+      ...block,
+      eraseBox: {
+        x: Math.round(b.x * sx),
+        y: Math.round(b.y * sy),
+        width: Math.round(b.width * sx),
+        height: Math.round(b.height * sy),
+        _wasNormalized: b._wasNormalized,
+      },
+    };
+  });
+}
+
 function cacheGet(key) {
   if (!_translationCache.has(key)) return null;
   // LRU: hit 시 맨 뒤로 이동
@@ -115,13 +146,16 @@ export async function handleStandardTranslation(message, sender) {
       const settings = await getSettings();
       result = await translateImageWithVision({
         base64DataUrl,
-        naturalWidth: message.naturalWidth,
-        naturalHeight: message.naturalHeight,
+        // AI가 실제로 본 이미지 치수로 좌표 역변환
+        naturalWidth: message.compressedWidth || message.naturalWidth,
+        naturalHeight: message.compressedHeight || message.naturalHeight,
         mode: "gemini",
         apiKey: settings.geminiApiKey || "",
         geminiModel: settings.imageStdGeminiModel || settings.geminiModel || "",
         targetLang: message.targetLang || "ko",
       });
+      // 압축 좌표 → 원본 좌표로 스케일업
+      result = scaleBlocksToOriginal(result, message);
     }
 
   } else if (engine === "other" && message.imageStdOtherType === "ocr_server") {
@@ -130,8 +164,8 @@ export async function handleStandardTranslation(message, sender) {
       base64DataUrl,
       serverUrl: message.imageStdOtherUrl || "",
       apiKey: message.imageStdOtherKey || "",
-      naturalWidth: message.naturalWidth,
-      naturalHeight: message.naturalHeight,
+      naturalWidth: message.compressedWidth || message.naturalWidth,
+      naturalHeight: message.compressedHeight || message.naturalHeight,
     });
 
     const settings = await getSettings();
@@ -147,6 +181,7 @@ export async function handleStandardTranslation(message, sender) {
       eraseBox: block.bbox,
       orientation: "horizontal",
     }));
+    result = scaleBlocksToOriginal(result, message);
 
   } else {
     // Gemini / OpenAI / Other [Vision API] 방식: 1-Pass 직접 번역
@@ -156,8 +191,9 @@ export async function handleStandardTranslation(message, sender) {
 
     result = await translateImageWithVision({
       base64DataUrl,
-      naturalWidth: message.naturalWidth,
-      naturalHeight: message.naturalHeight,
+      // AI가 실제로 본 이미지 치수로 좌표 역변환
+      naturalWidth: message.compressedWidth || message.naturalWidth,
+      naturalHeight: message.compressedHeight || message.naturalHeight,
       mode,
       apiKey: message.apiKey || "",
       geminiModel: message.imageStdGeminiModel || "",
@@ -168,6 +204,8 @@ export async function handleStandardTranslation(message, sender) {
       otherVisionModel: message.imageStdOtherModel || "",
       targetLang: message.targetLang || "ko",
     });
+    // 압축 좌표 → 원본 좌표로 스케일업
+    result = scaleBlocksToOriginal(result, message);
   }
 
   cacheSet(cacheKey, result);

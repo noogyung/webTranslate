@@ -136,14 +136,12 @@ export async function translatePremiumOpenAI({ base64DataUrl, apiKey, model, tar
   formData.append("model", model || "gpt-image-2");
   formData.append("prompt", prompt);
   formData.append("image", blob, "image.png");
-  // b64_json으로 요청: URL 만료 없이 즉시 사용 가능 (gpt-image-1-mini 이상 지원)
-  formData.append("response_format", "b64_json");
 
   const response = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
-    signal: AbortSignal.timeout(180000), // 180초: gpt-image-2 실제 처리 시간 고려
+    signal: AbortSignal.timeout(180000),
   });
 
   if (!response.ok) {

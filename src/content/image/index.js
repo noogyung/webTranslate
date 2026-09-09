@@ -77,13 +77,17 @@ async function handleImageTranslation(img) {
 
     // ── 이미지 압축 (긴 축 1024px) ───────────────────────────
     tEnd = wtTimer("이미지 압축 (compressBase64ForOcr)");
-    imageUrl = await compressBase64ForOcr(imageUrl, img.naturalWidth, img.naturalHeight);
+    const compressed = await compressBase64ForOcr(imageUrl, img.naturalWidth, img.naturalHeight);
     tEnd();
+    // compressed = { dataUrl, width, height } — AI가 실제 받는 이미지 치수
+    const compressedDataUrl = compressed.dataUrl;
+    const compressedWidth = compressed.width;
+    const compressedHeight = compressed.height;
 
     if (mode === "standard") {
-      await handleStandardMode(img, imageUrl, settings);
+      await handleStandardMode(img, compressedDataUrl, compressedWidth, compressedHeight, settings);
     } else if (mode === "premium") {
-      await handlePremiumMode(img, imageUrl, settings);
+      await handlePremiumMode(img, compressedDataUrl, compressedWidth, compressedHeight, settings);
     }
 
     const total = Math.round(performance.now() - t0);
@@ -105,12 +109,14 @@ async function handleImageTranslation(img) {
  * ─────────────────────────────────────────────────────────── */
 async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) {
   const MAX_LONG_EDGE = 1024;
-  if (!naturalWidth || !naturalHeight) return base64DataUrl;
+  if (!naturalWidth || !naturalHeight) {
+    return { dataUrl: base64DataUrl, width: naturalWidth || 0, height: naturalHeight || 0 };
+  }
 
   const longEdge = Math.max(naturalWidth, naturalHeight);
   if (longEdge <= MAX_LONG_EDGE) {
     console.log(`[WT Compress] 압축 불필요 (${naturalWidth}×${naturalHeight}px)`);
-    return base64DataUrl;
+    return { dataUrl: base64DataUrl, width: naturalWidth, height: naturalHeight };
   }
 
   const scale = MAX_LONG_EDGE / longEdge;
@@ -127,22 +133,29 @@ async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) 
       const compressed = canvas.toDataURL("image/jpeg", 0.92);
       const ratio = Math.round(compressed.length / base64DataUrl.length * 100);
       console.log(`[WT Compress] ${naturalWidth}×${naturalHeight} → ${targetW}×${targetH}px | 크기 ${ratio}%`);
-      resolve(compressed);
+      resolve({ dataUrl: compressed, width: targetW, height: targetH });
     };
-    image.onerror = () => { console.warn("[WT Compress] 압축 실패, 원본 사용"); resolve(base64DataUrl); };
+    image.onerror = () => {
+      console.warn("[WT Compress] 압축 실패, 원본 사용");
+      resolve({ dataUrl: base64DataUrl, width: naturalWidth, height: naturalHeight });
+    };
     image.src = base64DataUrl;
   });
 }
 
-async function handleStandardMode(img, imageUrl, settings) {
+async function handleStandardMode(img, imageUrl, compressedWidth, compressedHeight, settings) {
   const engine = settings.imageStdEngine || "free";
   const tEnd = wtTimer(`일반 번역 [${engine}] (translateStandard)`);
 
   const result = await sendToBackground({
     action: "translateStandard",
     imageUrl,
+    // naturalWidth/Height: 원본 이미지 치수 (캔버스 렌더링 기준)
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
+    // compressedWidth/Height: AI가 실제 받은 이미지 치수 (좌표 역변환 기준)
+    compressedWidth,
+    compressedHeight,
     targetLang: settings.targetLang || "ko",
     pageUrl: location.href,
     // v2.0 일반 번역 엔진 정보
@@ -163,7 +176,7 @@ async function handleStandardMode(img, imageUrl, settings) {
   if (!result.blocks || result.blocks.length === 0) throw new Error("감지된 텍스트가 없습니다.");
 
   console.group(
-    `%c[WT Debug] OCR 결과 — ${result.blocks.length}개 블록 / ${img.naturalWidth}×${img.naturalHeight}px`,
+    `%c[WT Debug] OCR 결과 — ${result.blocks.length}개 블록 / ${img.naturalWidth}×${img.naturalHeight}px (AI: ${compressedWidth}×${compressedHeight}px)`,
     "color: #89b4fa; font-weight: bold;"
   );
   console.table(
@@ -175,7 +188,7 @@ async function handleStandardMode(img, imageUrl, settings) {
         번역: b.translatedText?.substring(0, 40),
         "X(px)": box.x ?? "?", "Y(px)": box.y ?? "?",
         "W(px)": box.width ?? "?", "H(px)": box.height ?? "?",
-        좌표: box._wasNormalized ? "0~1000→px" : "원본px",
+        좌표: box._wasNormalized ? "0~1000→px(스케일업)" : "원본px",
         방향: b.orientation || "-",
       };
     })
@@ -188,7 +201,7 @@ async function handleStandardMode(img, imageUrl, settings) {
 }
 
 /* ── 고급 모드: Step1 OCR모델 + Step2 합성모델 분리 전달 ────── */
-async function handlePremiumMode(img, imageUrl, settings) {
+async function handlePremiumMode(img, imageUrl, compressedWidth, compressedHeight, settings) {
   const engine = settings.imagePremEngine || "gemini";
   const tEnd = wtTimer(`고급 번역 [${engine}] (OCR → 이미지 합성)`);
 
@@ -197,22 +210,20 @@ async function handlePremiumMode(img, imageUrl, settings) {
     imageUrl,
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
+    compressedWidth,
+    compressedHeight,
     targetLang: settings.targetLang || "ko",
     pageUrl: location.href,
     // v2.0 고급 번역 엔진 정보
     imagePremEngine: engine,
-    // Gemini Step1/Step2 모델
     imagePremGeminiOcrModel: settings.imagePremGeminiOcrModel || "",
     imagePremGeminiSynthModel: settings.imagePremGeminiSynthModel || "",
-    // OpenAI Step1/Step2 모델
     imagePremOpenAIOcrModel: settings.imagePremOpenAIOcrModel || "",
     imagePremOpenAISynthModel: settings.imagePremOpenAISynthModel || "",
-    // Other 서버 + Step1/Step2 모델
     imagePremOtherUrl: settings.imagePremOtherUrl || "",
     imagePremOtherKey: settings.imagePremOtherKey || "",
     imagePremOtherOcrModel: settings.imagePremOtherOcrModel || "",
     imagePremOtherSynthModel: settings.imagePremOtherSynthModel || "",
-    // API 키 (공통)
     apiKey: settings.geminiApiKey || "",
     openaiApiKey: settings.openaiApiKey || "",
   });
