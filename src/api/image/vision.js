@@ -37,22 +37,37 @@ export async function translateImageWithVision({
   // Gemini는 [ymin,xmin,ymax,xmax] 0~1000 정규화, GPT/Other는 [xmin,ymin,xmax,ymax] 픽셀
   const isGemini = (mode === "gemini");
 
-  const coordFormat = isGemini
-    ? `eraseBox: [ymin,xmin,ymax,xmax] 0-1000 normalized scale (e.g. 500=50% of image).`
-    : `eraseBox: [xmin,ymin,xmax,ymax] in actual pixel coordinates of this image.`;
-
-  // 5개 핵심 필드 경량 프롬프트
-  const prompt =
-    `You are a high-precision OCR translator for image translation.\n\n` +
-    dimNote +
-    `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
-    `- ${coordFormat}\n` +
-    `- originalText: exact extracted text, line breaks as \\n.\n` +
-    `- translatedText: ${langName} translation preserving line breaks.\n` +
-    `- orientation: "horizontal" | "vertical" | "rotated".\n` +
-    `- textColor: dominant text color as #RRGGBB.\n` +
-    `Return valid JSON array only. No markdown.\n\n` +
-    `[{"eraseBox":[a,b,c,d],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
+  let prompt;
+  if (isGemini) {
+    // Gemini: 0~1000 정규화 좌표
+    prompt =
+      `You are a high-precision OCR translator for image translation.\n\n` +
+      dimNote +
+      `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
+      `- eraseBox: [ymin,xmin,ymax,xmax] 0-1000 normalized scale (e.g. 500=50% of image).\n` +
+      `- originalText: exact extracted text, line breaks as \\n.\n` +
+      `- translatedText: ${langName} translation preserving line breaks.\n` +
+      `- orientation: "horizontal" | "vertical" | "rotated".\n` +
+      `- textColor: dominant text color as #RRGGBB.\n` +
+      `Return valid JSON array only. No markdown.\n\n` +
+      `[{"eraseBox":[y1,x1,y2,x2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
+  } else {
+    // GPT / Other Vision: 픽셀 좌표, 말풍선 개별 탐지 최적화
+    const langName = getLanguageName(targetLang);
+    prompt =
+      `You are a manga/comic OCR translator. Scan the ENTIRE image from top to bottom.\n\n` +
+      dimNote +
+      `IMPORTANT: Treat each individual speech bubble, thought bubble, caption box, and sound effect as a SEPARATE block. Do NOT merge multiple bubbles into one. Do NOT miss any text anywhere in the image.\n\n` +
+      `For each text block, return exactly these 5 fields:\n` +
+      `- eraseBox: [xmin, ymin, xmax, ymax] in PIXEL coordinates of this ${naturalWidth}x${naturalHeight}px image. Must be tight around the text.\n` +
+      `  Example for text at upper-right: [820, 45, 1200, 310]\n` +
+      `- originalText: exact text extracted, line breaks as \\n.\n` +
+      `- translatedText: ${langName} translation. Preserve natural line breaks.\n` +
+      `- orientation: "horizontal" | "vertical" (vertical = text runs top-to-bottom).\n` +
+      `- textColor: text color as #RRGGBB.\n\n` +
+      `Return a valid JSON array only. No markdown fences. No explanation.\n\n` +
+      `[{"eraseBox":[x1,y1,x2,y2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
+  }
 
   let rawContent = "";
 
