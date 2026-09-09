@@ -152,7 +152,6 @@ export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, tran
   formData.append("prompt", prompt);
   formData.append("image", blob, "sprite.png");
   if (apiSize) formData.append("size", apiSize);
-  formData.append("response_format", "b64_json");
 
   const response = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
