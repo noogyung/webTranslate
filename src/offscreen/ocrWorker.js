@@ -222,9 +222,63 @@ function dbnetPostProcess(probMap, mapW, mapH, origW, origH) {
     boxes.push({ x, y, width: x2 - x, height: y2 - y, score });
   }
 
-  console.log(`[OCR Worker] 필터링: 크기=${filteredBySize}, 스코어=${filteredByScore} → 최종 ${boxes.length}개 박스`);
-  boxes.sort((a, b) => a.y - b.y || a.x - b.x);
-  return boxes;
+  console.log(`[OCR Worker] 필터링: 크기=${filteredBySize}, 스코어=${filteredByScore} → ${boxes.length}개 박스 (병합 전)`);
+
+  // NMS: 겹치는 박스 병합 (같은 말풍선의 내/외곽 중복 제거)
+  const merged = mergeOverlappingBoxes(boxes, 0.3);
+  console.log(`[OCR Worker] 병합: ${boxes.length} → ${merged.length}개 박스`);
+  merged.sort((a, b) => a.y - b.y || a.x - b.x);
+  return merged;
+}
+
+/**
+ * 겹치는 박스를 병합 (IoU 기반 NMS).
+ * DBNet이 같은 텍스트 영역에서 내/외곽 윤곽을 별도 컴포넌트로 검출하는 문제 해결.
+ */
+function mergeOverlappingBoxes(boxes, iouThresh = 0.3) {
+  if (boxes.length <= 1) return boxes;
+
+  // 스코어 높은 순 정렬
+  const sorted = [...boxes].sort((a, b) => b.score - a.score);
+  const used = new Array(sorted.length).fill(false);
+  const result = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (used[i]) continue;
+    let merged = { ...sorted[i] };
+    used[i] = true;
+
+    // 현재 박스와 겹치는 모든 박스를 합침
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (used[j]) continue;
+      if (calcIoU(merged, sorted[j]) > iouThresh) {
+        // 두 박스를 감싸는 최소 직사각형으로 병합
+        const x1 = Math.min(merged.x, sorted[j].x);
+        const y1 = Math.min(merged.y, sorted[j].y);
+        const x2 = Math.max(merged.x + merged.width, sorted[j].x + sorted[j].width);
+        const y2 = Math.max(merged.y + merged.height, sorted[j].y + sorted[j].height);
+        merged = {
+          x: x1, y: y1, width: x2 - x1, height: y2 - y1,
+          score: Math.max(merged.score, sorted[j].score),
+        };
+        used[j] = true;
+      }
+    }
+    result.push(merged);
+  }
+  return result;
+}
+
+function calcIoU(a, b) {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.width, b.x + b.width);
+  const y2 = Math.min(a.y + a.height, b.y + b.height);
+  if (x2 <= x1 || y2 <= y1) return 0;
+  const inter = (x2 - x1) * (y2 - y1);
+  const areaA = a.width * a.height;
+  const areaB = b.width * b.height;
+  return inter / (areaA + areaB - inter);
 }
 
 function findConnectedComponents(bitmap, w, h) {
