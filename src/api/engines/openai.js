@@ -1,6 +1,13 @@
 import { getLanguageName } from '../constants.js';
 import { buildTranslationPrompt, buildDictionaryPrompt } from '../prompts.js';
 
+/** temperature 미지원 모델 판별 (o1/o3 reasoning, GPT-5.x 계열 등) */
+function isReasoningModel(model) {
+  if (!model) return false;
+  const m = model.toLowerCase();
+  return /^(o[13])/.test(m) || /^gpt-5/.test(m);
+}
+
 export async function fetchAvailableOpenAIModels(apiKey) {
   if (!apiKey) throw new Error("OpenAI API 키가 입력되지 않았습니다.");
   const response = await fetch("https://api.openai.com/v1/models", {
@@ -58,7 +65,7 @@ export async function translateWithOpenAI(texts, targetLang, apiKey, modelName, 
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
-      temperature: 0.3,
+      ...(!isReasoningModel(model) && { temperature: 0.3 }),
     }),
     signal: AbortSignal.timeout(30000),
   });
@@ -93,7 +100,7 @@ export async function fetchOpenAIDictionary(word, targetLang, apiKey, modelName)
       model,
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
+      ...(!isReasoningModel(model) && { temperature: 0.2 }),
     }),
   });
 

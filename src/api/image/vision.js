@@ -8,6 +8,13 @@
 
 import { getLanguageName } from '../constants.js';
 
+/** temperature 미지원 모델 판별 (o1/o3 reasoning, GPT-5.x 계열 등) */
+function isReasoningModel(model) {
+  if (!model) return false;
+  const m = model.toLowerCase();
+  return /^(o[13])/.test(m) || /^gpt-5/.test(m);
+}
+
 export async function translateImageWithVision({
   base64DataUrl,
   naturalWidth,
@@ -85,7 +92,7 @@ export async function translateImageWithVision({
           { type: "image_url", image_url: { url: base64DataUrl, detail: "high" } }
         ]}],
         max_completion_tokens: 2048,
-        temperature: 0.0,
+        ...(!isReasoningModel(openaiModel) && { temperature: 0.0 }),
         response_format: { type: "json_object" },
       }),
     });
