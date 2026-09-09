@@ -121,17 +121,37 @@ function preprocessDet(img, maxSide = 960) {
 }
 
 function preprocessRec(img, box, recH = 48) {
-  const canvas = new OffscreenCanvas(box.width, box.height);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+  // 1) 원본에서 박스 영역 크롭
+  const cropCanvas = new OffscreenCanvas(box.width, box.height);
+  const cropCtx = cropCanvas.getContext("2d");
+  cropCtx.drawImage(img, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
 
-  const ratio = recH / box.height;
-  const recW = Math.max(1, Math.round(box.width * ratio));
+  // 2) 세로 텍스트 감지 → 90° 반시계 회전 (PaddleOCR 표준)
+  let srcCanvas = cropCanvas;
+  let srcW = box.width, srcH = box.height;
+  const isVertical = box.height > box.width * 1.5;
+
+  if (isVertical) {
+    // 90° CCW 회전: (x,y) → (y, width-1-x), 결과 크기 height×width
+    const rotCanvas = new OffscreenCanvas(box.height, box.width);
+    const rotCtx = rotCanvas.getContext("2d");
+    rotCtx.translate(0, box.width);
+    rotCtx.rotate(-Math.PI / 2);
+    rotCtx.drawImage(cropCanvas, 0, 0);
+    srcCanvas = rotCanvas;
+    srcW = box.height;
+    srcH = box.width;
+  }
+
+  // 3) 높이를 recH에 맞추고 가로 비율 유지
+  const ratio = recH / srcH;
+  const recW = Math.max(1, Math.round(srcW * ratio));
   const resCanvas = new OffscreenCanvas(recW, recH);
   const resCtx = resCanvas.getContext("2d");
-  resCtx.drawImage(canvas, 0, 0, recW, recH);
+  resCtx.drawImage(srcCanvas, 0, 0, recW, recH);
   const imageData = resCtx.getImageData(0, 0, recW, recH);
 
+  // 4) NCHW 텐서 생성, [-1, 1] 정규화
   const chw = recW * recH;
   const tensor = new Float32Array(3 * chw);
   for (let i = 0; i < chw; i++) {
@@ -139,13 +159,23 @@ function preprocessRec(img, box, recH = 48) {
     tensor[chw + i] = (imageData.data[i * 4 + 1] / 255 - 0.5) / 0.5;
     tensor[2 * chw + i] = (imageData.data[i * 4 + 2] / 255 - 0.5) / 0.5;
   }
-  return { tensor, width: recW, height: recH };
+  return { tensor, width: recW, height: recH, isVertical };
 }
 
 // ── DBNet 후처리 ──
 
 function dbnetPostProcess(probMap, mapW, mapH, origW, origH) {
-  const thresh = 0.3, boxThresh = 0.6, unclipRatio = 1.5, minSize = 3;
+  const thresh = 0.2, boxThresh = 0.4, unclipRatio = 2.0, minSize = 3;
+
+  // 확률 맵 통계 디버그
+  let maxProb = 0, sumProb = 0, aboveThreshCount = 0;
+  for (let i = 0; i < mapW * mapH; i++) {
+    const v = probMap[i];
+    if (v > maxProb) maxProb = v;
+    sumProb += v;
+    if (v > thresh) aboveThreshCount++;
+  }
+  console.log(`[OCR Worker] ProbMap 통계: ${mapW}×${mapH} | max=${maxProb.toFixed(3)} avg=${(sumProb / (mapW * mapH)).toFixed(4)} | thresh>${thresh}: ${aboveThreshCount}px (${(aboveThreshCount / (mapW * mapH) * 100).toFixed(1)}%)`);
 
   const bitmap = new Uint8Array(mapW * mapH);
   for (let i = 0; i < bitmap.length; i++) {
@@ -157,8 +187,11 @@ function dbnetPostProcess(probMap, mapW, mapH, origW, origH) {
   const scaleX = origW / mapW;
   const scaleY = origH / mapH;
 
+  console.log(`[OCR Worker] 연결 컴포넌트: ${components.length}개 (scale: ${scaleX.toFixed(2)}×${scaleY.toFixed(2)})`);
+  let filteredBySize = 0, filteredByScore = 0;
+
   for (const pixels of components) {
-    if (pixels.length < minSize * minSize) continue;
+    if (pixels.length < minSize * minSize) { filteredBySize++; continue; }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const [px, py] of pixels) {
@@ -169,12 +202,12 @@ function dbnetPostProcess(probMap, mapW, mapH, origW, origH) {
     }
 
     const bw = maxX - minX + 1, bh = maxY - minY + 1;
-    if (bw < minSize || bh < minSize) continue;
+    if (bw < minSize || bh < minSize) { filteredBySize++; continue; }
 
     let sum = 0;
     for (const [px, py] of pixels) sum += probMap[py * mapW + px];
     const score = sum / pixels.length;
-    if (score < boxThresh) continue;
+    if (score < boxThresh) { filteredByScore++; continue; }
 
     const area = bw * bh;
     const perimeter = 2 * (bw + bh);
@@ -189,6 +222,7 @@ function dbnetPostProcess(probMap, mapW, mapH, origW, origH) {
     boxes.push({ x, y, width: x2 - x, height: y2 - y, score });
   }
 
+  console.log(`[OCR Worker] 필터링: 크기=${filteredBySize}, 스코어=${filteredByScore} → 최종 ${boxes.length}개 박스`);
   boxes.sort((a, b) => a.y - b.y || a.x - b.x);
   return boxes;
 }
@@ -295,7 +329,8 @@ async function runOcr(base64DataUrl, lang = "ja") {
 
   // Recognition
   const results = [];
-  for (const box of boxes) {
+  for (let bi = 0; bi < boxes.length; bi++) {
+    const box = boxes[bi];
     try {
       const rec = preprocessRec(img, box);
       const recInput = new ort.Tensor("float32", rec.tensor, [1, 3, rec.height, rec.width]);
@@ -308,6 +343,8 @@ async function runOcr(base64DataUrl, lang = "ja") {
       const classes = dims[2];
 
       const decoded = ctcDecode(logits, timeSteps, classes);
+      console.log(`[OCR Worker] Box#${bi}: ${box.x},${box.y} ${box.width}×${box.height}${rec.isVertical ? " [V→H]" : ""} | recInput=${rec.width}×${rec.height} | dims=[${dims}] | text="${decoded.text}" conf=${decoded.confidence.toFixed(2)}`);
+
       if (decoded.text.trim().length > 0) {
         results.push({
           text: decoded.text.trim(),
@@ -316,7 +353,7 @@ async function runOcr(base64DataUrl, lang = "ja") {
         });
       }
     } catch (e) {
-      console.warn("[OCR Worker] Rec 실패:", e.message, box);
+      console.warn(`[OCR Worker] Rec#${bi} 실패:`, e.message, box);
     }
   }
 
