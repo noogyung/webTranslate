@@ -1,6 +1,6 @@
-import { handleTranslation, handleWordDictionary } from "./translationService.js";
+import { handleTranslation, handleWordDictionary, translateTextArray } from "./translationService.js";
 import { handleImageTranslation, handleBoundingBoxesLocation, handleStandardTranslation, handlePremiumTranslation, handlePremiumStep2Translation, fetchImageAsBase64 } from "./imageService.js";
-import { DEFAULT_SETTINGS } from "../options/storage.js";
+import { DEFAULT_SETTINGS, getSettings } from "../options/storage.js";
 
 export function initializeMessageHandlers() {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -85,6 +85,27 @@ export function initializeMessageHandlers() {
       fetchImageAsBase64(message.imageUrl, message.pageUrl || _sender?.tab?.url || "")
         .then((dataUrl) => sendResponse({ success: true, dataUrl }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    // Free 엔진: content script가 WASM OCR한 결과를 메인 번역기로 위임
+    if (message.action === "translateFreeOcr") {
+      (async () => {
+        try {
+          const settings = await getSettings();
+          const texts = (message.ocrBlocks || []).map(b => b.text).filter(t => t?.trim());
+          const translations = await translateTextArray(texts, settings);
+          const blocks = (message.ocrBlocks || []).map((block, i) => ({
+            originalText: block.text,
+            translatedText: translations[i] || block.text,
+            eraseBox: block.bbox,
+            orientation: "horizontal",
+          }));
+          sendResponse({ success: true, blocks });
+        } catch (err) {
+          sendResponse({ success: false, error: err.message });
+        }
+      })();
       return true;
     }
   });

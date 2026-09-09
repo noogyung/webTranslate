@@ -1,64 +1,152 @@
 /* ────────────────────────────────────────────
- * 일반 모드 Canvas 렌더러
- * 원문 영역 배경 채우기 + 번역문 자동 폰트 맞춤 렌더링
+ * 일반 모드 Canvas 렌더러 v2.0
+ * - 5필드 경량 프롬프트 응답 대응 (glyphBox/containerBox null 허용)
+ * - 세로(vertical) / 회전(rotated) 텍스트 방향 지원
+ * - 배경색 자동 추정 (이미지 픽셀 샘플링 → 평균)
+ * - 가독성을 위한 텍스트 색상 대비 보정 (어두운 배경 → 흰 글씨)
  * ──────────────────────────────────────────── */
 
 /**
  * Canvas 위에 번역 오버레이를 렌더링.
  * @param {HTMLCanvasElement} canvas
+ * @param {HTMLImageElement} sourceImg - 배경색 샘플링 원본 이미지
  * @param {Array} blocks - normalizeBox 적용된 블록 배열
- * @param {number} naturalWidth - 원본 이미지 자연 너비
- * @param {number} naturalHeight - 원본 이미지 자연 높이
+ * @param {number} naturalWidth
+ * @param {number} naturalHeight
  */
-export function renderTranslatedOverlay(canvas, blocks, naturalWidth, naturalHeight) {
+export function renderTranslatedOverlay(canvas, sourceImg, blocks, naturalWidth, naturalHeight) {
   canvas.width = naturalWidth;
   canvas.height = naturalHeight;
   const ctx = canvas.getContext("2d");
+
+  // 배경색 샘플링용 소스 이미지를 보조 캔버스에 그리기
+  let samplerCtx = null;
+  if (sourceImg && sourceImg.complete && sourceImg.naturalWidth > 0) {
+    try {
+      const sampler = document.createElement("canvas");
+      sampler.width = naturalWidth;
+      sampler.height = naturalHeight;
+      samplerCtx = sampler.getContext("2d");
+      samplerCtx.drawImage(sourceImg, 0, 0, naturalWidth, naturalHeight);
+    } catch (_) {
+      samplerCtx = null;
+    }
+  }
 
   blocks.forEach((block, blockIdx) => {
     if (!block.eraseBox || !block.translatedText) return;
 
     const { x, y, width, height } = block.eraseBox;
+    const orientation = block.orientation || "horizontal";
 
-    // 디버깅: 실제 Canvas에 그려지는 좌표
+    // 배경색: textColor와 대비 보정을 위해 픽셀 샘플링 우선, 없으면 블록값 사용
+    const bgColor = samplerCtx
+      ? sampleAverageColor(samplerCtx, x, y, width, height)
+      : (block.backgroundColor || "#FFFFFF");
+
+    const textColor = pickContrastColor(block.textColor || "#000000", bgColor);
+
     console.log(
       `%c[WT Canvas] #${blockIdx} "${block.originalText?.substring(0, 20)}" → "${block.translatedText?.substring(0, 20)}"`,
       "color: #a6e3a1; font-size: 11px;",
-      `| eraseBox: x=${x} y=${y} w=${width} h=${height}`,
-      `| canvas: ${naturalWidth}×${naturalHeight}px`
+      `| ${orientation} | eraseBox: x=${x} y=${y} w=${width} h=${height}`
     );
 
-    // Step 1: 원문 영역 배경색으로 지우기
-    ctx.fillStyle = block.backgroundColor || "#FFFFFF";
+    // Step 1: 원문 영역 지우기
+    ctx.fillStyle = bgColor;
     ctx.fillRect(x, y, width, height);
 
     // Step 2: 번역문 렌더링
-    const padX = 3;
-    const padY = 2;
+    const padX = 3, padY = 2;
     const drawX = x + padX;
     const drawY = y + padY;
     const drawW = width - padX * 2;
     const drawH = height - padY * 2;
-
     if (drawW <= 0 || drawH <= 0) return;
 
-    const textColor = block.textColor || "#000000";
-    const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
-
+    ctx.save();
     ctx.fillStyle = textColor;
-    ctx.font = `${fontSize}px sans-serif`;
-    ctx.textBaseline = "top";
 
-    // 외곽선(stroke) 적용
-    if (block.strokeColor && block.strokeColor !== textColor) {
-      ctx.strokeStyle = block.strokeColor;
-      ctx.lineWidth = Math.max(1, fontSize * 0.08);
-      ctx.lineJoin = "round";
-      wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, true);
+    if (orientation === "vertical") {
+      // 세로 텍스트: 중앙 기준 90도 회전
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate(Math.PI / 2);
+      const rotW = drawH, rotH = drawW;
+      const fontSize = calculateFitFontSize(ctx, block.translatedText, rotW, rotH);
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.textBaseline = "top";
+      wrapText(ctx, block.translatedText, -rotW / 2, -rotH / 2, rotW, fontSize * 1.25, false);
+    } else if (orientation === "rotated") {
+      // 회전(45도 사선) 텍스트: 가독성을 위해 수평 렌더링으로 폴백
+      const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.textBaseline = "top";
+      wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, false);
+    } else {
+      // 수평 (기본)
+      const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.textBaseline = "top";
+
+      // 외곽선 (stroke) 적용
+      if (block.strokeColor && block.strokeColor !== textColor) {
+        ctx.strokeStyle = block.strokeColor;
+        ctx.lineWidth = Math.max(1, fontSize * 0.08);
+        ctx.lineJoin = "round";
+        wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, true);
+      }
+
+      wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, false);
     }
 
-    wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, false);
+    ctx.restore();
   });
+}
+
+/**
+ * 영역 내 픽셀 샘플링하여 평균 배경색 반환.
+ */
+function sampleAverageColor(ctx, x, y, width, height) {
+  try {
+    const sampleW = Math.max(1, Math.min(width, 20));
+    const sampleH = Math.max(1, Math.min(height, 20));
+    const data = ctx.getImageData(x, y, sampleW, sampleH).data;
+    let r = 0, g = 0, b = 0, count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i]; g += data[i + 1]; b += data[i + 2];
+      count++;
+    }
+    if (count === 0) return "#FFFFFF";
+    return `rgb(${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)})`;
+  } catch (_) {
+    return "#FFFFFF";
+  }
+}
+
+/**
+ * 배경색과 대비가 충분한 글자 색 선택.
+ * 주어진 textColor가 가독성이 나쁘면 흰색/검정으로 대체.
+ */
+function pickContrastColor(textColor, bgColor) {
+  const bgL = getLuminance(bgColor);
+  const txtL = getLuminance(textColor);
+  const contrast = (Math.max(bgL, txtL) + 0.05) / (Math.min(bgL, txtL) + 0.05);
+  if (contrast >= 3.0) return textColor; // 충분한 대비
+  return bgL > 0.5 ? "#111111" : "#FFFFFF"; // 대비 부족 → 자동 보정
+}
+
+function getLuminance(color) {
+  const ctx2 = document.createElement("canvas").getContext("2d");
+  ctx2.fillStyle = color;
+  ctx2.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx2.getImageData(0, 0, 1, 1).data;
+  const toLinear = v => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 }
 
 /**
@@ -72,58 +160,43 @@ function calculateFitFontSize(ctx, text, maxWidth, maxHeight) {
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     ctx.font = `${mid}px sans-serif`;
-
     const lines = getWrappedLines(ctx, text, maxWidth);
     const totalHeight = lines.length * mid * 1.25;
-
-    if (totalHeight <= maxHeight) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
+    if (totalHeight <= maxHeight) { best = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
   }
-
   return best;
 }
 
 /**
- * 텍스트를 maxWidth에 맞춰 줄바꿈한 행 배열 반환.
+ * 텍스트를 maxWidth에 맞춰 줄바꿈한 행 배열 반환 (CJK 글자 단위).
  */
 function getWrappedLines(ctx, text, maxWidth) {
-  const words = text.split("");  // 한글/CJK 대응: 글자 단위 분리
   const lines = [];
-  let currentLine = "";
-
-  for (const char of words) {
-    const testLine = currentLine + char;
-    const metrics = ctx.measureText(testLine);
-
-    if (metrics.width > maxWidth && currentLine.length > 0) {
-      lines.push(currentLine);
-      currentLine = char;
-    } else {
-      currentLine = testLine;
+  for (const rawLine of text.split("\n")) {
+    let current = "";
+    for (const char of rawLine) {
+      const test = current + char;
+      if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+        lines.push(current);
+        current = char;
+      } else {
+        current = test;
+      }
     }
+    if (current) lines.push(current);
   }
-
-  if (currentLine) lines.push(currentLine);
-  return lines;
+  return lines.length > 0 ? lines : [""];
 }
 
 /**
  * Canvas에 줄바꿈 텍스트 렌더링.
- * @param {boolean} strokeOnly - true면 strokeText만 호출
  */
 function wrapText(ctx, text, x, y, maxWidth, lineHeight, strokeOnly = false) {
   const lines = getWrappedLines(ctx, text, maxWidth);
-
   for (let i = 0; i < lines.length; i++) {
     const lineY = y + i * lineHeight;
-    if (strokeOnly) {
-      ctx.strokeText(lines[i], x, lineY);
-    } else {
-      ctx.fillText(lines[i], x, lineY);
-    }
+    if (strokeOnly) ctx.strokeText(lines[i], x, lineY);
+    else ctx.fillText(lines[i], x, lineY);
   }
 }

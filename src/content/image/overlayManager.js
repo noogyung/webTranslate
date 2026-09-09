@@ -18,7 +18,6 @@ export function createCanvasOverlay(img, blocks) {
   // 래퍼 생성
   const wrapper = ensureWrapper(img);
 
-  // img의 object-fit 읽기 (ensureWrapper 이후 img 스타일이 바뀌어 있을 수 있으므로 직접 확인)
   const imgCs = window.getComputedStyle(img);
   const objFit = imgCs.objectFit || "fill";
   const objPos = imgCs.objectPosition || "50% 50%";
@@ -35,7 +34,8 @@ export function createCanvasOverlay(img, blocks) {
     object-position: ${objPos};
   `;
 
-  renderTranslatedOverlay(canvas, blocks, naturalWidth, naturalHeight);
+  // v2.0: 배경색 자동 추정을 위해 sourceImg 전달
+  renderTranslatedOverlay(canvas, img, blocks, naturalWidth, naturalHeight);
   wrapper.appendChild(canvas);
 
   // 이미지 마킹

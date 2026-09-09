@@ -49,8 +49,8 @@ async function handleImageTranslation(img) {
     tEnd();
 
     let mode = null;
-    if (settings.imageTransMode && settings.imageTransMode !== "ask") {
-      mode = settings.imageTransMode;
+    if (settings.imageMode && settings.imageMode !== "ask") {
+      mode = settings.imageMode;
     } else {
       const savedMode = await getSavedModeForSite(location.hostname);
       mode = savedMode || await showModeDialog();
@@ -135,19 +135,27 @@ async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) 
 }
 
 async function handleStandardMode(img, imageUrl, settings) {
-  const tEnd = wtTimer("OCR + 1-Pass 번역 (translateStandard)");
+  const engine = settings.imageStdEngine || "free";
+  const tEnd = wtTimer(`일반 번역 [${engine}] (translateStandard)`);
+
   const result = await sendToBackground({
     action: "translateStandard",
     imageUrl,
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
     targetLang: settings.targetLang || "ko",
-    mode: settings.translationMode || "gemini",
-    apiKey: settings.geminiApiKey || "",
-    geminiModel: settings.geminiModel || "gemini-3.6-flash",
-    openaiApiKey: settings.openaiApiKey || "",
-    openaiModel: settings.openaiModel || "gpt-4o-mini",
     pageUrl: location.href,
+    // v2.0 일반 번역 엔진 정보
+    imageStdEngine: engine,
+    imageStdGeminiModel: settings.imageStdGeminiModel || "",
+    imageStdOpenAIModel: settings.imageStdOpenAIModel || "",
+    imageStdOtherType: settings.imageStdOtherType || "ocr_server",
+    imageStdOtherUrl: settings.imageStdOtherUrl || "",
+    imageStdOtherKey: settings.imageStdOtherKey || "",
+    imageStdOtherModel: settings.imageStdOtherModel || "",
+    // API 키 (공통)
+    apiKey: settings.geminiApiKey || "",
+    openaiApiKey: settings.openaiApiKey || "",
   });
   tEnd();
 
@@ -168,7 +176,7 @@ async function handleStandardMode(img, imageUrl, settings) {
         "X(px)": box.x ?? "?", "Y(px)": box.y ?? "?",
         "W(px)": box.width ?? "?", "H(px)": box.height ?? "?",
         좌표: box._wasNormalized ? "0~1000→px" : "원본px",
-        타입: b.type || "-", 방향: b.orientation || "-",
+        방향: b.orientation || "-",
       };
     })
   );
@@ -179,23 +187,34 @@ async function handleStandardMode(img, imageUrl, settings) {
   tRender();
 }
 
-/* ── 고급 모드: 단순 단일 호출 (낙관적 업데이트 없음) ─────────── */
+/* ── 고급 모드: Step1 OCR모델 + Step2 합성모델 분리 전달 ────── */
 async function handlePremiumMode(img, imageUrl, settings) {
-  const tEnd = wtTimer("고급 모드 전체 (OCR + 이미지 합성)");
+  const engine = settings.imagePremEngine || "gemini";
+  const tEnd = wtTimer(`고급 번역 [${engine}] (OCR → 이미지 합성)`);
+
   const result = await sendToBackground({
     action: "translatePremium",
     imageUrl,
     naturalWidth: img.naturalWidth,
     naturalHeight: img.naturalHeight,
     targetLang: settings.targetLang || "ko",
-    premiumEngine: settings.imageTransPremiumEngine || "gemini",
-    premiumModel: settings.imageTransPremiumModel || "gemini-3.1-flash-image",
-    mode: settings.translationMode || "gemini",
-    apiKey: settings.geminiApiKey || "",
-    geminiModel: settings.geminiModel || "gemini-3.6-flash",
-    openaiApiKey: settings.openaiApiKey || "",
-    openaiModel: settings.openaiModel || "gpt-4o-mini",
     pageUrl: location.href,
+    // v2.0 고급 번역 엔진 정보
+    imagePremEngine: engine,
+    // Gemini Step1/Step2 모델
+    imagePremGeminiOcrModel: settings.imagePremGeminiOcrModel || "",
+    imagePremGeminiSynthModel: settings.imagePremGeminiSynthModel || "",
+    // OpenAI Step1/Step2 모델
+    imagePremOpenAIOcrModel: settings.imagePremOpenAIOcrModel || "",
+    imagePremOpenAISynthModel: settings.imagePremOpenAISynthModel || "",
+    // Other 서버 + Step1/Step2 모델
+    imagePremOtherUrl: settings.imagePremOtherUrl || "",
+    imagePremOtherKey: settings.imagePremOtherKey || "",
+    imagePremOtherOcrModel: settings.imagePremOtherOcrModel || "",
+    imagePremOtherSynthModel: settings.imagePremOtherSynthModel || "",
+    // API 키 (공통)
+    apiKey: settings.geminiApiKey || "",
+    openaiApiKey: settings.openaiApiKey || "",
   });
   tEnd();
 
