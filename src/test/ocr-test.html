@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>PP-OCR 테스트</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+h1 { font-size: 18px; margin-bottom: 12px; color: #7b8cff; }
+#drop-zone {
+  border: 2px dashed #555; border-radius: 12px; padding: 60px 20px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+  background: #16213e; margin-bottom: 16px;
+}
+#drop-zone.dragover { border-color: #7b8cff; background: #1a1a4e; }
+#drop-zone p { font-size: 14px; color: #888; }
+#controls { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+select, button { padding: 6px 12px; border-radius: 6px; border: 1px solid #444; background: #16213e; color: #e0e0e0; font-size: 13px; }
+button { cursor: pointer; background: #7b8cff; color: #fff; border: none; font-weight: 600; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.ctrl-input { width:60px; padding:5px; background:#16213e; color:#e0e0e0; border:1px solid #444; border-radius:4px; }
+#status { font-size: 13px; color: #aaa; margin-bottom: 12px; min-height: 20px; }
+#result-area { display: flex; gap: 16px; flex-wrap: wrap; }
+#canvas-wrap { position: relative; display: inline-block; }
+canvas { max-width: 100%; border-radius: 8px; border: 1px solid #333; }
+#text-panel {
+  flex: 1; min-width: 300px; max-height: 80vh; overflow-y: auto;
+  background: #16213e; border-radius: 8px; padding: 12px;
+}
+.block-row { padding: 6px 8px; border-bottom: 1px solid #2a2a4a; font-size: 13px; display: flex; gap: 8px; }
+.block-row:hover { background: #1a1a4e; }
+.block-idx { color: #7b8cff; font-weight: 700; min-width: 24px; }
+.block-text { flex: 1; word-break: break-all; }
+.block-meta { color: #666; font-size: 11px; white-space: nowrap; }
+.block-conf { font-size: 11px; padding: 1px 5px; border-radius: 3px; }
+.conf-high { background: #1b4332; color: #52b788; }
+.conf-mid { background: #3d3200; color: #e6b800; }
+.conf-low { background: #4a1520; color: #e05555; }
+#log { margin-top: 16px; background: #0d1117; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; color: #8b949e; }
+</style>
+</head>
+<body>
+
+<h1>🔍 PP-OCR WASM 테스트 (드래그 앤 드롭)</h1>
+
+<div id="drop-zone">
+  <p>📁 이미지를 여기에 드래그하거나 클릭하여 선택</p>
+  <input type="file" id="file-input" accept="image/*" style="display:none">
+</div>
+
+<div id="controls">
+  <label>언어: <select id="lang-select">
+    <option value="ja" selected>日本語 (ja)</option>
+    <option value="ko">한국어 (ko)</option>
+    <option value="zh">中文 (zh)</option>
+    <option value="en">English (en)</option>
+  </select></label>
+  <label>Det Thresh: <input type="number" id="det-thresh" value="0.2" step="0.05" min="0.05" max="0.9" class="ctrl-input"></label>
+  <label>Box Thresh: <input type="number" id="box-thresh" value="0.4" step="0.05" min="0.1" max="0.9" class="ctrl-input"></label>
+  <label>Unclip: <input type="number" id="unclip-ratio" value="2.0" step="0.1" min="0.5" max="5.0" class="ctrl-input"></label>
+  <button id="run-btn" disabled>▶ OCR 실행</button>
+</div>
+
+<div id="status">이미지를 드래그하세요...</div>
+<div id="result-area">
+  <div id="canvas-wrap"><canvas id="canvas"></canvas></div>
+  <div id="text-panel" style="display:none"></div>
+</div>
+<div id="log"></div>
+
+<script src="../models/ort.min.js"></script>
+<script src="ocr-test.js"></script>
+</body>
+</html>
