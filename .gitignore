@@ -25,3 +25,8 @@ google*.html
 *.exe
 *.dll
 *.bin
+
+# ONNX models & WASM runtime (large binary, download separately)
+src/models/*.onnx
+src/models/*.wasm
+src/models/ort*.js

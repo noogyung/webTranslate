@@ -9,6 +9,44 @@ import { getSettings } from "../options/storage.js";
 const _translationCache = new Map();
 const CACHE_MAX = 20;
 
+/* ── Offscreen Document 관리 (PP-OCR WASM 추론용) ────────────── */
+let _offscreenCreating = null;
+
+async function ensureOffscreenDocument() {
+  // 이미 존재하면 스킵
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    documentUrls: [chrome.runtime.getURL("src/offscreen/ocr.html")],
+  });
+  if (existingContexts.length > 0) return;
+
+  // 생성 중이면 대기
+  if (_offscreenCreating) {
+    await _offscreenCreating;
+    return;
+  }
+
+  _offscreenCreating = chrome.offscreen.createDocument({
+    url: "src/offscreen/ocr.html",
+    reasons: ["WORKERS"],
+    justification: "PP-OCR WASM ONNX 추론 실행",
+  });
+  await _offscreenCreating;
+  _offscreenCreating = null;
+  console.log("[WT] Offscreen Document 생성 완료");
+}
+
+/**
+ * 타겟 번역 언어로부터 소스 언어를 추측 (OCR 모델 선택용).
+ * 이미지 번역은 주로 ja→ko, zh→ko 등의 패턴이므로
+ * targetLang이 ko이면 소스는 ja(일본어)로 추정.
+ */
+function guessSourceLang(targetLang) {
+  if (targetLang === "ko" || targetLang === "en") return "ja"; // 일→한/영 번역이 주 사용 패턴
+  if (targetLang === "ja") return "zh"; // 중→일
+  return "ja"; // 기본값
+}
+
 /* ── 압축 좌표계 → 원본 좌표계 스케일업 ──────────────────────
  * vision API는 압축본(compressedWidth×compressedHeight)을 기준으로
  * 정규화 좌표를 px로 역변환하므로, 원본 치수로 다시 스케일업 필요.
@@ -126,35 +164,33 @@ export async function handleStandardTranslation(message, sender) {
   let result;
 
   if (engine === "free") {
-    // ocrBlocks가 있으면 → WASM OCR 결과를 메인 번역기로 위임
-    // ocrBlocks가 없으면 → PP-OCRv6 WASM 미구현 상태: Gemini Vision 1-Pass로 폴백
-    if (message.ocrBlocks && message.ocrBlocks.length > 0) {
+    // PP-OCR WASM: Offscreen Document에서 OCR 실행 → 메인 번역기로 텍스트 위임
+    await ensureOffscreenDocument();
+    const ocrResult = await chrome.runtime.sendMessage({
+      action: "runFreeOcr",
+      imageDataUrl: base64DataUrl,
+      lang: guessSourceLang(message.targetLang),
+    });
+
+    if (!ocrResult?.success || !ocrResult.blocks?.length) {
+      console.warn("[WT] Free OCR 결과 없음 — 빈 배열 반환");
+      result = [];
+    } else {
       const settings = await getSettings();
-      const texts = message.ocrBlocks
+      const ocrBlocks = ocrResult.blocks;
+      const texts = ocrBlocks
         .map(b => cleanOcrTextForTranslation(b.text))
         .filter(t => t.length > 0);
       const translations = await translateTextArray(texts, settings);
-      result = message.ocrBlocks.map((block, i) => ({
+
+      result = ocrBlocks.map((block, i) => ({
         originalText: block.text,
         translatedText: translations[i] || block.text,
         eraseBox: block.bbox,
-        orientation: "horizontal",
+        orientation: block.bbox.width < block.bbox.height ? "vertical" : "horizontal",
       }));
-    } else {
-      // WASM OCR 미구현 → Gemini Vision 1-Pass 폴백
-      console.warn("[WT] Free 엔진: WASM OCR 미구현 → Gemini Vision 1-Pass 폴백");
-      const settings = await getSettings();
-      result = await translateImageWithVision({
-        base64DataUrl,
-        // AI가 실제로 본 이미지 치수로 좌표 역변환
-        naturalWidth: message.compressedWidth || message.naturalWidth,
-        naturalHeight: message.compressedHeight || message.naturalHeight,
-        mode: "gemini",
-        apiKey: settings.geminiApiKey || "",
-        geminiModel: settings.imageStdGeminiModel || settings.geminiModel || "",
-        targetLang: message.targetLang || "ko",
-      });
-      // 압축 좌표 → 원본 좌표로 스케일업
+      // OCR는 원본 해상도 기준 좌표 반환 → scaleBlocksToOriginal 불필요할 수 있으나
+      // 압축 이미지를 전송했다면 스케일업 필요
       result = scaleBlocksToOriginal(result, message);
     }
 

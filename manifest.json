@@ -7,6 +7,7 @@
   "permissions": [
     "storage",
     "alarms",
+    "offscreen",
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess"
   ],
@@ -35,7 +36,9 @@
     {
       "resources": [
         "src/content/*",
-        "src/content/image/*"
+        "src/content/image/*",
+        "src/models/*",
+        "src/offscreen/*"
       ],
       "matches": [
         "<all_urls>"
