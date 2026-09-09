@@ -539,6 +539,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
     return true;
   }
+
+  // ── 통합 핸들러 (base64 왕복 절약) ──
+
+  if (message.action === "cropAndBuildSprite") {
+    cropAndBuildSprite(message.imageDataUrl, message.boxes, message.padding || 15, message.gap || 4)
+      .then(result => sendResponse({ success: true, ...result }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
+
+  if (message.action === "splitAndComposite") {
+    splitAndComposite(message.translatedSpriteUrl, message.layout, message.cropBboxes, message.originalDataUrl)
+      .then(dataUrl => sendResponse({ success: true, dataUrl }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
 });
 
 /**
@@ -756,6 +772,134 @@ async function splitSpriteSheet(dataUrl, layout, cropBboxes) {
   img.close();
   console.log(`[OCR Worker] 스프라이트 분할 완료: ${results.length}개 크롭`);
   return results;
+}
+
+/**
+ * 통합: 원본 이미지에서 크롭 → 스프라이트 시트 빌드 (1회 메시지).
+ * 중간 base64 직렬화를 생략하여 ~5초 절약.
+ */
+async function cropAndBuildSprite(imageDataUrl, boxes, padding, gap) {
+  const t0 = Date.now();
+  const img = await loadImageBitmap(imageDataUrl);
+
+  // 크롭 생성 (메모리 내 ImageBitmap 유지, base64 변환 없음)
+  const cropImages = [];
+  const cropBboxes = [];
+
+  for (const box of boxes) {
+    const x = Math.max(0, box.x - padding);
+    const y = Math.max(0, box.y - padding);
+    const x2 = Math.min(img.width, box.x + box.width + padding);
+    const y2 = Math.min(img.height, box.y + box.height + padding);
+    const w = x2 - x;
+    const h = y2 - y;
+
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+    const cropBitmap = canvas.transferToImageBitmap();
+    cropImages.push({ bitmap: cropBitmap, width: w, height: h });
+    cropBboxes.push({ x, y, width: w, height: h });
+  }
+  img.close();
+
+  // 스프라이트 시트 빌드 (ImageBitmap에서 직접)
+  const contentWidth = Math.max(...cropImages.map(c => c.width));
+  let contentHeight = 0;
+  const regions = [];
+
+  for (let i = 0; i < cropImages.length; i++) {
+    regions.push({ y: contentHeight, width: cropImages[i].width, height: cropImages[i].height });
+    contentHeight += cropImages[i].height;
+    if (i < cropImages.length - 1) contentHeight += gap;
+  }
+
+  // 표준 API 사이즈 선택
+  const STANDARD_SIZES = [
+    { w: 1024, h: 1024 },
+    { w: 1024, h: 1536 },
+    { w: 1536, h: 1024 },
+  ];
+  let bestSize = STANDARD_SIZES.find(s => contentWidth <= s.w && contentHeight <= s.h);
+  if (!bestSize) {
+    bestSize = contentWidth > contentHeight ? { w: 1536, h: 1024 } : { w: 1024, h: 1536 };
+    const scale = Math.min(bestSize.w / contentWidth, bestSize.h / contentHeight);
+    for (const r of regions) { r.y = Math.round(r.y * scale); r.width = Math.round(r.width * scale); r.height = Math.round(r.height * scale); }
+    contentHeight = Math.round(contentHeight * scale);
+  }
+
+  const canvas = new OffscreenCanvas(bestSize.w, bestSize.h);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#E8E8E8";
+  ctx.fillRect(0, 0, bestSize.w, bestSize.h);
+
+  for (let i = 0; i < cropImages.length; i++) {
+    ctx.drawImage(cropImages[i].bitmap, 0, regions[i].y, regions[i].width, regions[i].height);
+    cropImages[i].bitmap.close();
+    if (i < cropImages.length - 1 && gap > 0) {
+      ctx.fillStyle = "#808080";
+      ctx.fillRect(0, regions[i].y + regions[i].height, bestSize.w, gap);
+      ctx.fillStyle = "#E8E8E8";
+    }
+  }
+
+  const blob = await canvas.convertToBlob({ type: "image/png" });
+  const reader = new FileReader();
+  const dataUrl = await new Promise(resolve => {
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+
+  const layout = {
+    regions, spriteWidth: bestSize.w, spriteHeight: bestSize.h,
+    contentWidth, contentHeight, gap,
+  };
+  const apiSize = `${bestSize.w}x${bestSize.h}`;
+  console.log(`[OCR Worker] 크롭→스프라이트 통합: ${bestSize.w}×${bestSize.h}px, ${boxes.length}개 크롭 (${Date.now() - t0}ms)`);
+  return { dataUrl, layout, apiSize, cropBboxes };
+}
+
+/**
+ * 통합: 번역된 스프라이트 분할 → 원본 위에 합성 (1회 메시지).
+ */
+async function splitAndComposite(translatedSpriteUrl, layout, cropBboxes, originalDataUrl) {
+  const t0 = Date.now();
+
+  // 분할
+  const spriteImg = await loadImageBitmap(translatedSpriteUrl);
+  const sx = spriteImg.width / layout.spriteWidth;
+  const sy = spriteImg.height / layout.spriteHeight;
+
+  // 원본 로드 + 합성 캔버스
+  const bgImg = await loadImageBitmap(originalDataUrl);
+  const canvas = new OffscreenCanvas(bgImg.width, bgImg.height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bgImg, 0, 0);
+  bgImg.close();
+
+  // 각 크롭 분할 → 즉시 합성 (중간 base64 없음)
+  for (let i = 0; i < layout.regions.length; i++) {
+    const r = layout.regions[i];
+    const cy = Math.round(r.y * sy);
+    const cw = Math.round(r.width * sx);
+    const ch = Math.round(r.height * sy);
+    const bbox = cropBboxes[i];
+
+    // 스프라이트에서 크롭 영역 직접 원본 위에 그리기
+    ctx.drawImage(spriteImg, 0, cy, cw, ch, bbox.x, bbox.y, bbox.width, bbox.height);
+  }
+  spriteImg.close();
+
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.95 });
+  const reader = new FileReader();
+  const dataUrl = await new Promise(resolve => {
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+
+  console.log(`[OCR Worker] 분할→합성 통합: ${layout.regions.length}개 크롭 (${Date.now() - t0}ms)`);
+  return dataUrl;
 }
 
 console.log("[OCR Worker] Offscreen OCR Worker 초기화 완료 — ort 존재:", typeof ort !== "undefined");

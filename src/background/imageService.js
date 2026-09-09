@@ -323,33 +323,24 @@ export async function handlePremiumTranslation(message, sender) {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // Step 2: 스프라이트 시트 → Image Gen API 1회 호출 → 분할 → 합성
+  // Step 2: 크롭→스프라이트→API→분할→합성 (통합 메시지)
   // ══════════════════════════════════════════════════════════════
-  T.crop0 = Date.now();
+
+  // 2a. 크롭 + 스프라이트 빌드 (1회 메시지)
+  T.sprite0 = Date.now();
   const boxes = translationPairs.map(p => p.bbox);
-  const cropResult = await chrome.runtime.sendMessage({
-    action: "cropBoxes",
+  const spriteResult = await chrome.runtime.sendMessage({
+    action: "cropAndBuildSprite",
     imageDataUrl: base64DataUrl,
     boxes,
     padding: 15,
-  });
-  if (!cropResult?.success) throw new Error("크롭 생성 실패: " + (cropResult?.error || "unknown"));
-  const crops = cropResult.crops;
-  T.crop1 = Date.now();
-  console.log(`[WT Premium Hybrid] 크롭 생성: ${crops.length}개 (${T.crop1 - T.crop0}ms)`);
-
-  // 2b. 스프라이트 시트 빌드
-  T.sprite0 = Date.now();
-  const spriteResult = await chrome.runtime.sendMessage({
-    action: "buildSpriteSheet",
-    crops,
     gap: 4,
   });
-  if (!spriteResult?.success) throw new Error("스프라이트 빌드 실패: " + (spriteResult?.error || "unknown"));
+  if (!spriteResult?.success) throw new Error("크롭→스프라이트 실패: " + (spriteResult?.error || "unknown"));
   T.sprite1 = Date.now();
-  console.log(`[WT Premium Hybrid] 스프라이트 빌드: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px (${T.sprite1 - T.sprite0}ms)`);
+  console.log(`[WT Premium Hybrid] 크롭→스프라이트: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px (${T.sprite1 - T.sprite0}ms)`);
 
-  // 2c. 스프라이트 시트 1회 API 호출
+  // 2b. 스프라이트 시트 1회 API 호출
   T.api0 = Date.now();
   let translatedSpriteUrl;
   if (engine === "openai") {
@@ -373,38 +364,25 @@ export async function handlePremiumTranslation(message, sender) {
   T.api1 = Date.now();
   console.log(`[WT Premium Hybrid] Image Gen API: ${T.api1 - T.api0}ms`);
 
-  // 2d. 번역된 스프라이트 분할
-  T.split0 = Date.now();
-  const cropBboxes = crops.map(c => c.bbox);
-  const splitResult = await chrome.runtime.sendMessage({
-    action: "splitSpriteSheet",
-    dataUrl: translatedSpriteUrl,
-    layout: spriteResult.layout,
-    cropBboxes,
-  });
-  if (!splitResult?.success) throw new Error("스프라이트 분할 실패: " + (splitResult?.error || "unknown"));
-  T.split1 = Date.now();
-  console.log(`[WT Premium Hybrid] 스프라이트 분할: ${splitResult.crops.length}개 (${T.split1 - T.split0}ms)`);
-
-  // ══════════════════════════════════════════════════════════════
-  // Step 3: Offscreen에서 합성
-  // ══════════════════════════════════════════════════════════════
+  // 2c. 분할 + 합성 (1회 메시지)
   T.comp0 = Date.now();
   const compositeResult = await chrome.runtime.sendMessage({
-    action: "compositeCrops",
+    action: "splitAndComposite",
+    translatedSpriteUrl,
+    layout: spriteResult.layout,
+    cropBboxes: spriteResult.cropBboxes,
     originalDataUrl: base64DataUrl,
-    crops: splitResult.crops,
   });
-  if (!compositeResult?.success) throw new Error("합성 실패: " + (compositeResult?.error || "unknown"));
+  if (!compositeResult?.success) throw new Error("분할→합성 실패: " + (compositeResult?.error || "unknown"));
   T.comp1 = Date.now();
 
   const total = T.comp1 - T.start;
   console.log(
     `[WT Premium Hybrid] ✅ 완료 — 총 ${total}ms\n` +
     `  PP-OCR: ${(T.ocr1 - T.ocr0)}ms | LLM번역: ${(T.llm1 - T.llm0)}ms\n` +
-    `  크롭: ${(T.crop1 - T.crop0)}ms | 스프라이트: ${(T.sprite1 - T.sprite0)}ms\n` +
+    `  크롭→스프라이트: ${(T.sprite1 - T.sprite0)}ms\n` +
     `  Image Gen API: ${(T.api1 - T.api0)}ms\n` +
-    `  분할: ${(T.split1 - T.split0)}ms | 합성: ${(T.comp1 - T.comp0)}ms`
+    `  분할→합성: ${(T.comp1 - T.comp0)}ms`
   );
 
   await incrementImageCount("premium");
