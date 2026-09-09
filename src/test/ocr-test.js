@@ -264,7 +264,7 @@ async function runOcr() {
 
     var boxes = dbnetPost(pm, det.width, det.height, det.origW, det.origH, thresh, boxThresh, unclipRatio);
 
-    var results = [];
+    var rawResults = [];
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i];
       var rec = preprocessRec(img, box);
@@ -272,9 +272,17 @@ async function runOcr() {
       var rR = await recSession.run(Object.fromEntries([[recSession.inputNames[0], rIn]]));
       var lo = rR[recSession.outputNames[0]];
       var decoded = ctcDecode(lo.data, lo.dims[1], lo.dims[2]);
-      results.push({ x: box.x, y: box.y, width: box.width, height: box.height, score: box.score, text: decoded.text, conf: decoded.confidence, isVertical: rec.isVertical });
+      rawResults.push({ x: box.x, y: box.y, width: box.width, height: box.height, score: box.score, text: decoded.text, conf: decoded.confidence, isVertical: rec.isVertical });
       log("[Rec#" + i + "] " + box.x + "," + box.y + " " + box.width + "×" + box.height + (rec.isVertical ? " [V→H]" : "") + " → \"" + decoded.text + "\" (" + decoded.confidence.toFixed(2) + ")");
     }
+
+    // 노이즈 필터 (conf < 0.5 제거)
+    var filtered = rawResults.filter(function (r) { return r.conf >= 0.5; });
+    log("[필터] " + rawResults.length + " → " + filtered.length + "개 (conf>=0.5)");
+
+    // 인접 블록 그룹화
+    var results = groupAdjacentBlocks(filtered);
+    log("[그룹화] " + filtered.length + " → " + results.length + "개 블록");
 
     var elapsed = Math.round(performance.now() - t0);
     setStatus("✅ 완료 — " + results.length + "개 블록, " + elapsed + "ms");
@@ -284,6 +292,69 @@ async function runOcr() {
     log("[ERROR] " + e.stack);
   }
   $("run-btn").disabled = false;
+}
+
+// ── 인접 블록 그룹화 ──
+function groupAdjacentBlocks(blocks) {
+  if (blocks.length <= 1) return blocks;
+
+  var parent = blocks.map(function (_, i) { return i; });
+  function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+  function union(a, b) { parent[find(a)] = find(b); }
+
+  for (var i = 0; i < blocks.length; i++) {
+    for (var j = i + 1; j < blocks.length; j++) {
+      if (shouldGroup(blocks[i], blocks[j])) union(i, j);
+    }
+  }
+
+  var groups = {};
+  for (var k = 0; k < blocks.length; k++) {
+    var root = find(k);
+    if (!groups[root]) groups[root] = [];
+    groups[root].push(blocks[k]);
+  }
+
+  var result = [];
+  var keys = Object.keys(groups);
+  for (var ki = 0; ki < keys.length; ki++) {
+    var members = groups[keys[ki]];
+    if (members.length === 1) { result.push(members[0]); continue; }
+
+    // 우→좌 정렬 (만화 세로 텍스트 읽기 순서)
+    members.sort(function (a, b) { return b.x - a.x; });
+
+    var x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity, confSum = 0;
+    for (var mi = 0; mi < members.length; mi++) {
+      x1 = Math.min(x1, members[mi].x);
+      y1 = Math.min(y1, members[mi].y);
+      x2 = Math.max(x2, members[mi].x + members[mi].width);
+      y2 = Math.max(y2, members[mi].y + members[mi].height);
+      confSum += members[mi].conf;
+    }
+    result.push({
+      x: x1, y: y1, width: x2 - x1, height: y2 - y1,
+      text: members.map(function (m) { return m.text; }).join("\n"),
+      conf: confSum / members.length,
+      isVertical: members[0].isVertical,
+      score: members[0].score,
+      groupSize: members.length
+    });
+  }
+  result.sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+  return result;
+}
+
+function shouldGroup(a, b) {
+  var ax2 = a.x + a.width, bx2 = b.x + b.width;
+  var ay2 = a.y + a.height, by2 = b.y + b.height;
+  var hOverlap = Math.min(ax2, bx2) - Math.max(a.x, b.x);
+  var maxW = Math.max(a.width, b.width);
+  if (hOverlap < -maxW * 0.5) return false;
+  var vOverlap = Math.min(ay2, by2) - Math.max(a.y, b.y);
+  var minH = Math.min(a.height, b.height);
+  if (vOverlap < minH * 0.3) return false;
+  return true;
 }
 
 // ── 시각화 ──

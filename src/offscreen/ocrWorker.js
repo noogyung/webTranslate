@@ -15,13 +15,10 @@ let currentRecLang = null;
 let charDict = null;
 let ortInitialized = false;
 
-// 언어 → 모델/사전 매핑
-const REC_MODELS = {
-  ko: { model: "korean_PP-OCRv3_rec_infer.onnx", dict: "korean_dict.txt" },
-  ja: { model: "japan_PP-OCRv3_rec_infer.onnx", dict: "japan_dict.txt" },
-  zh: { model: "ch_PP-OCRv4_rec_infer.onnx", dict: "ppocr_keys_v1.txt" },
-  en: { model: "en_PP-OCRv3_rec_infer.onnx", dict: "en_dict.txt" },
-};
+// PP-OCRv6 small 통합 모델 (50개 언어 단일 모델)
+const DET_MODEL = "PP-OCRv6_small_det.onnx";
+const REC_MODEL = "PP-OCRv6_small_rec.onnx";
+const REC_DICT = "ppocrv6_dict.txt";
 
 // ── ONNX Runtime 초기화 ──
 function initOrt() {
@@ -40,7 +37,7 @@ function initOrt() {
 async function ensureDetSession() {
   if (detSession) return;
   initOrt();
-  const modelUrl = chrome.runtime.getURL("src/models/ch_PP-OCRv4_det_infer.onnx");
+  const modelUrl = chrome.runtime.getURL(`src/models/${DET_MODEL}`);
   console.log("[OCR Worker] Det 모델 로드 시작:", modelUrl);
   const response = await fetch(modelUrl);
   if (!response.ok) throw new Error(`Det 모델 다운로드 실패: HTTP ${response.status}`);
@@ -52,39 +49,30 @@ async function ensureDetSession() {
   console.log("[OCR Worker] Det 모델 로드 완료 — inputs:", detSession.inputNames, "outputs:", detSession.outputNames);
 }
 
-async function ensureRecSession(lang) {
-  const targetLang = REC_MODELS[lang] ? lang : "ja";
-  if (recSession && currentRecLang === targetLang) return;
-
-  if (recSession) {
-    recSession.release();
-    recSession = null;
-    charDict = null;
-    console.log(`[OCR Worker] Rec 모델 해제: ${currentRecLang}`);
-  }
+async function ensureRecSession() {
+  if (recSession) return;
 
   initOrt();
-  const config = REC_MODELS[targetLang];
-  const modelUrl = chrome.runtime.getURL(`src/models/${config.model}`);
+  const modelUrl = chrome.runtime.getURL(`src/models/${REC_MODEL}`);
   console.log("[OCR Worker] Rec 모델 로드 시작:", modelUrl);
   const response = await fetch(modelUrl);
-  if (!response.ok) throw new Error(`Rec 모델 다운로드 실패: HTTP ${response.status} (${config.model})`);
+  if (!response.ok) throw new Error(`Rec 모델 다운로드 실패: HTTP ${response.status} (${REC_MODEL})`);
   const buffer = await response.arrayBuffer();
   console.log("[OCR Worker] Rec 모델 크기:", (buffer.byteLength / 1024 / 1024).toFixed(1), "MB");
   recSession = await ort.InferenceSession.create(buffer, {
     executionProviders: ["wasm"],
   });
 
-  const dictUrl = chrome.runtime.getURL(`src/models/${config.dict}`);
+  const dictUrl = chrome.runtime.getURL(`src/models/${REC_DICT}`);
   const dictRes = await fetch(dictUrl);
-  if (!dictRes.ok) throw new Error(`사전 파일 다운로드 실패: HTTP ${dictRes.status} (${config.dict})`);
+  if (!dictRes.ok) throw new Error(`사전 파일 다운로드 실패: HTTP ${dictRes.status} (${REC_DICT})`);
   const dictText = await dictRes.text();
   // 공백 문자도 유효 사전 항목 — trim/filter 금지, trailing empty line만 제거
   charDict = dictText.split("\n").map(l => l.replace(/\r$/, ""));
   while (charDict.length > 0 && charDict[charDict.length - 1] === "") charDict.pop();
 
-  currentRecLang = targetLang;
-  console.log(`[OCR Worker] Rec 모델 로드 완료: ${targetLang} (${config.model}, 사전 ${charDict.length}자) — inputs:`, recSession.inputNames, "outputs:", recSession.outputNames);
+  currentRecLang = "v6";
+  console.log(`[OCR Worker] Rec 모델 로드 완료: PP-OCRv6 (${REC_MODEL}, 사전 ${charDict.length}자) — inputs:`, recSession.inputNames, "outputs:", recSession.outputNames);
 }
 
 // ── 이미지 전처리 ──
@@ -359,7 +347,7 @@ async function runOcr(base64DataUrl, lang = "ja") {
   const t0 = performance.now();
 
   await ensureDetSession();
-  await ensureRecSession(lang);
+  await ensureRecSession();
   const tLoad = performance.now();
   console.log(`[OCR Worker] 모델 로드: ${Math.round(tLoad - t0)}ms`);
 
@@ -383,7 +371,7 @@ async function runOcr(base64DataUrl, lang = "ja") {
   console.log(`[OCR Worker] 후처리: ${boxes.length}개 박스, ${Math.round(tPost - tDet)}ms`);
 
   // Recognition
-  const results = [];
+  const rawResults = [];
   for (let bi = 0; bi < boxes.length; bi++) {
     const box = boxes[bi];
     try {
@@ -401,10 +389,11 @@ async function runOcr(base64DataUrl, lang = "ja") {
       console.log(`[OCR Worker] Box#${bi}: ${box.x},${box.y} ${box.width}×${box.height}${rec.isVertical ? " [V→H]" : ""} | recInput=${rec.width}×${rec.height} | dims=[${dims}] | text="${decoded.text}" conf=${decoded.confidence.toFixed(2)}`);
 
       if (decoded.text.trim().length > 0) {
-        results.push({
+        rawResults.push({
           text: decoded.text.trim(),
           confidence: decoded.confidence,
           bbox: box,
+          isVertical: rec.isVertical,
         });
       }
     } catch (e) {
@@ -413,9 +402,96 @@ async function runOcr(base64DataUrl, lang = "ja") {
   }
 
   const tRec = performance.now();
-  console.log(`[OCR Worker] 완료 — ${results.length}블록 | 로드=${Math.round(tLoad - t0)}ms Det=${Math.round(tDet - tLoad)}ms 후처리=${Math.round(tPost - tDet)}ms Rec=${Math.round(tRec - tPost)}ms 합계=${Math.round(tRec - t0)}ms`);
 
-  return results;
+  // ── 후처리: 노이즈 필터 + 인접 박스 그룹화 ──
+  const filtered = rawResults.filter(r => r.confidence >= 0.5);
+  console.log(`[OCR Worker] 노이즈 필터: ${rawResults.length} → ${filtered.length}개 (conf>=0.5)`);
+
+  const grouped = groupAdjacentBlocks(filtered);
+  console.log(`[OCR Worker] 그룹화: ${filtered.length} → ${grouped.length}개 블록`);
+  console.log(`[OCR Worker] 완료 — ${grouped.length}블록 | 로드=${Math.round(tLoad - t0)}ms Det=${Math.round(tDet - tLoad)}ms 후처리=${Math.round(tPost - tDet)}ms Rec=${Math.round(tRec - tPost)}ms 합계=${Math.round(tRec - t0)}ms`);
+
+  return grouped;
+}
+
+/**
+ * 인접한 세로 텍스트 블록을 같은 말풍선으로 그룹화.
+ * 조건: 수평 겹침/근접 + 수직 겹침 > 30%.
+ * 그룹 내 읽기 순서: 우→좌 (x 내림차순, 만화 세로 텍스트 규칙).
+ */
+function groupAdjacentBlocks(blocks) {
+  if (blocks.length <= 1) return blocks;
+
+  // Union-Find
+  const parent = blocks.map((_, i) => i);
+  function find(i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; }
+  function union(a, b) { parent[find(a)] = find(b); }
+
+  for (let i = 0; i < blocks.length; i++) {
+    for (let j = i + 1; j < blocks.length; j++) {
+      if (shouldGroup(blocks[i], blocks[j])) union(i, j);
+    }
+  }
+
+  // 그룹별 수집
+  const groups = {};
+  for (let i = 0; i < blocks.length; i++) {
+    const root = find(i);
+    if (!groups[root]) groups[root] = [];
+    groups[root].push(blocks[i]);
+  }
+
+  // 각 그룹을 하나의 블록으로 병합
+  const result = [];
+  for (const members of Object.values(groups)) {
+    if (members.length === 1) {
+      result.push(members[0]);
+      continue;
+    }
+
+    // 우→좌 정렬 (x 내림차순) — 만화 세로 텍스트 읽기 순서
+    members.sort((a, b) => b.bbox.x - a.bbox.x);
+
+    // 바운딩 박스 합산
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    let confSum = 0;
+    for (const m of members) {
+      x1 = Math.min(x1, m.bbox.x);
+      y1 = Math.min(y1, m.bbox.y);
+      x2 = Math.max(x2, m.bbox.x + m.bbox.width);
+      y2 = Math.max(y2, m.bbox.y + m.bbox.height);
+      confSum += m.confidence;
+    }
+
+    result.push({
+      text: members.map(m => m.text).join("\n"),
+      confidence: confSum / members.length,
+      bbox: { x: x1, y: y1, width: x2 - x1, height: y2 - y1, score: members[0].bbox.score },
+      isVertical: members[0].isVertical,
+    });
+  }
+
+  result.sort((a, b) => a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x);
+  return result;
+}
+
+function shouldGroup(a, b) {
+  const ax1 = a.bbox.x, ax2 = a.bbox.x + a.bbox.width;
+  const bx1 = b.bbox.x, bx2 = b.bbox.x + b.bbox.width;
+  const ay1 = a.bbox.y, ay2 = a.bbox.y + a.bbox.height;
+  const by1 = b.bbox.y, by2 = b.bbox.y + b.bbox.height;
+
+  // 수평: 겹침 또는 간격 < 큰 박스 너비의 50%
+  const hOverlap = Math.min(ax2, bx2) - Math.max(ax1, bx1);
+  const maxW = Math.max(a.bbox.width, b.bbox.width);
+  if (hOverlap < -maxW * 0.5) return false; // 너무 떨어짐
+
+  // 수직: 겹침 > 작은 박스 높이의 30%
+  const vOverlap = Math.min(ay2, by2) - Math.max(ay1, by1);
+  const minH = Math.min(a.bbox.height, b.bbox.height);
+  if (vOverlap < minH * 0.3) return false;
+
+  return true;
 }
 
 // ── 메시지 핸들러 ──
