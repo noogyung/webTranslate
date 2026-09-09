@@ -1,10 +1,9 @@
 /**
  * src/api/image/vision.js
  * Vision AI 1-Pass OCR+번역 모듈 (Gemini / OpenAI / Other Vision API)
- * - 하드코딩 모델명 완전 제거: 호출측에서 모델명을 반드시 전달
- * - 5개 핵심 필드 경량 프롬프트: eraseBox, originalText, translatedText, orientation, textColor
- * - Gemini: 0~1000 정규화 좌표 반환 / OpenAI(GPT): 픽셀 좌표 반환 → 분기 처리
- * - Other [Vision API 방식] (Ollama/Qwen 등 OpenAI 규격 호환 서버) 라우팅 추가
+ * - Gemini: [ymin,xmin,ymax,xmax] 0~1000 정규화 좌표 (모델 학습 형식)
+ * - GPT/Other: [xmin,ymin,xmax,ymax] 0~1000 정규화 좌표 (표준 이미지 좌표계)
+ * - Other [Vision API 방식] (Ollama/Qwen 등 OpenAI 규격 호환 서버) 라우팅
  */
 
 import { getLanguageName } from '../constants.js';
@@ -34,20 +33,40 @@ export async function translateImageWithVision({
     ? `Image size: ${naturalWidth}x${naturalHeight}px.\n`
     : "";
 
-  // 모든 모드 통일: [ymin,xmin,ymax,xmax] 0~1000 정규화 좌표
-  // Gemini는 이 형식을 명시적으로 학습. GPT/Other도 동일 형식으로 요청.
-  const prompt =
-    `You are a high-precision OCR translator for image translation.\n\n` +
-    dimNote +
-    `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
-    `- eraseBox: [ymin,xmin,ymax,xmax] normalized 0-1000 scale (0=top/left, 1000=bottom/right).\n` +
-    `  Example: text in upper-right → [50,700,200,980]; center → [400,300,600,700]\n` +
-    `- originalText: exact extracted text, line breaks as \\n.\n` +
-    `- translatedText: ${langName} translation preserving line breaks.\n` +
-    `- orientation: "horizontal" | "vertical".\n` +
-    `- textColor: dominant text color as #RRGGBB.\n` +
-    `Return valid JSON array only. No markdown.\n\n` +
-    `[{"eraseBox":[y1,x1,y2,x2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
+  const isGemini = (mode === "gemini");
+
+  // ── 프롬프트 분기 ────────────────────────────────────────────
+  let prompt;
+  if (isGemini) {
+    // Gemini: [ymin,xmin,ymax,xmax] 0~1000 정규화 (모델 자체 학습 형식)
+    prompt =
+      `You are a high-precision OCR translator for image translation.\n\n` +
+      dimNote +
+      `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
+      `- eraseBox: [ymin,xmin,ymax,xmax] fully covers text for clean removal.\n` +
+      `- originalText: exact extracted text, line breaks as \\n.\n` +
+      `- translatedText: ${langName} translation preserving line breaks.\n` +
+      `- orientation: "horizontal" | "vertical" | "rotated".\n` +
+      `- textColor: dominant text color as #RRGGBB.\n` +
+      `Coordinates: 0-1000 normalized scale (e.g. x=500 means 50% from left).\n` +
+      `Return valid JSON array only. No markdown.\n\n` +
+      `[{"eraseBox":[y,x,y,x],"originalText":"...","translatedText":"...(${langName})...","orientation":"horizontal","textColor":"#000000"}]`;
+  } else {
+    // GPT / Other Vision: [xmin,ymin,xmax,ymax] 0~1000 정규화 (표준 이미지 좌표계)
+    prompt =
+      `You are a manga/comic OCR translator. Scan the ENTIRE image from top to bottom.\n\n` +
+      dimNote +
+      `Detect every visible text block. Treat each speech bubble, thought bubble, caption, and sound effect as a SEPARATE block.\n\n` +
+      `Return ONLY these 5 fields per block in JSON:\n` +
+      `- eraseBox: [xmin,ymin,xmax,ymax] in normalized 0-1000 scale. Imagine the image as a 1000×1000 grid (0=left/top, 1000=right/bottom).\n` +
+      `  Example: text at upper-right corner → [700,50,980,300]; text at center → [300,400,700,600]\n` +
+      `- originalText: exact text extracted, line breaks as \\n.\n` +
+      `- translatedText: ${langName} translation. Preserve line breaks.\n` +
+      `- orientation: "horizontal" | "vertical" (vertical = text runs top-to-bottom).\n` +
+      `- textColor: text color as #RRGGBB.\n` +
+      `Return valid JSON array only. No markdown fences.\n\n` +
+      `[{"eraseBox":[x1,y1,x2,y2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
+  }
 
   let rawContent = "";
 
@@ -67,6 +86,7 @@ export async function translateImageWithVision({
         ]}],
         max_completion_tokens: 2048,
         temperature: 0.0,
+        response_format: { type: "json_object" },
       }),
     });
     if (!res.ok) throw new Error(`OpenAI Vision HTTP ${res.status}: ${await res.text()}`);
@@ -123,13 +143,13 @@ export async function translateImageWithVision({
     return [];
   }
 
-  // 모든 모드 동일: normalizeBox가 0~1000 자동 감지 후 역정규화
+  // Gemini: [ymin,xmin,ymax,xmax] / GPT,Other: [xmin,ymin,xmax,ymax]
   const finalBlocks = ocrBlocks.map((block) => ({
     ...block,
     translatedText: block.translatedText?.trim() || block.originalText || "",
-    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight),
-    glyphBox: block.glyphBox ? normalizeBox(block.glyphBox, naturalWidth, naturalHeight) : null,
-    containerBox: block.containerBox ? normalizeBox(block.containerBox, naturalWidth, naturalHeight) : null,
+    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight, isGemini),
+    glyphBox: block.glyphBox ? normalizeBox(block.glyphBox, naturalWidth, naturalHeight, isGemini) : null,
+    containerBox: block.containerBox ? normalizeBox(block.containerBox, naturalWidth, naturalHeight, isGemini) : null,
   })).filter(b => b.eraseBox !== null);
 
   console.log(`[WT Vision] 1-Pass 완료 — ${finalBlocks.length}블록 (mode=${mode})`);
@@ -160,6 +180,13 @@ function parseVisionJsonResponse(rawText) {
     if (Array.isArray(parsed)) return parsed;
     if (Array.isArray(parsed.textBlocks)) return parsed.textBlocks;
     if (Array.isArray(parsed.data)) return parsed.data;
+    if (Array.isArray(parsed.blocks)) return parsed.blocks;
+    if (Array.isArray(parsed.results)) return parsed.results;
+    // GPT가 response_format: json_object로 래핑할 때 1-depth 배열 탐색
+    const vals = Object.values(parsed);
+    for (const v of vals) {
+      if (Array.isArray(v) && v.length > 0 && v[0].eraseBox) return v;
+    }
     return [];
   } catch (err) {
     console.error("[WT Vision] JSON 파싱 오류:", err);
@@ -168,21 +195,29 @@ function parseVisionJsonResponse(rawText) {
 }
 
 /**
- * [ymin, xmin, ymax, xmax] → { x, y, width, height }
- * @param {boolean} forcePixel - true면 정규화 판정 없이 픽셀 직접 사용 (GPT Vision용)
+ * 바운딩박스 좌표를 { x, y, width, height } 픽셀 값으로 변환.
+ * @param {boolean} isGeminiOrder - true: [ymin,xmin,ymax,xmax], false: [xmin,ymin,xmax,ymax]
  */
-export function normalizeBox(rawBox, naturalWidth, naturalHeight, forcePixel = false) {
+export function normalizeBox(rawBox, naturalWidth, naturalHeight, isGeminiOrder = true) {
   if (!rawBox || !Array.isArray(rawBox) || rawBox.length !== 4) return null;
 
-  // [ymin, xmin, ymax, xmax] 0~1000 정규화 좌표 자동 감지
-  const [ymin, xmin, ymax, xmax] = rawBox;
-  const maxCoord = Math.max(ymin, xmin, ymax, xmax);
+  let c_xmin, c_ymin, c_xmax, c_ymax;
+  if (isGeminiOrder) {
+    // Gemini: [ymin, xmin, ymax, xmax]
+    [c_ymin, c_xmin, c_ymax, c_xmax] = rawBox;
+  } else {
+    // GPT/Other: [xmin, ymin, xmax, ymax]
+    [c_xmin, c_ymin, c_xmax, c_ymax] = rawBox;
+  }
+
+  // 0~1000 정규화 좌표 자동 감지
+  const maxCoord = Math.max(c_xmin, c_ymin, c_xmax, c_ymax);
   const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
 
-  const px_x1 = isNorm ? (xmin / 1000) * naturalWidth : xmin;
-  const px_y1 = isNorm ? (ymin / 1000) * naturalHeight : ymin;
-  const px_x2 = isNorm ? (xmax / 1000) * naturalWidth : xmax;
-  const px_y2 = isNorm ? (ymax / 1000) * naturalHeight : ymax;
+  const px_x1 = isNorm ? (c_xmin / 1000) * naturalWidth : c_xmin;
+  const px_y1 = isNorm ? (c_ymin / 1000) * naturalHeight : c_ymin;
+  const px_x2 = isNorm ? (c_xmax / 1000) * naturalWidth : c_xmax;
+  const px_y2 = isNorm ? (c_ymax / 1000) * naturalHeight : c_ymax;
 
   const PAD = 2;
   const x = Math.max(0, Math.round(px_x1) - PAD);

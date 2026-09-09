@@ -19,28 +19,24 @@ function scaleBlocksToOriginal(blocks, message) {
   const ch = message.compressedHeight;
   const nw = message.naturalWidth;
   const nh = message.naturalHeight;
-  console.log(`[WT Scale] scaleBlocksToOriginal: cw=${cw} ch=${ch} nw=${nw} nh=${nh} blocksLen=${(blocks||[]).length}`);
-  if (!cw || !ch || !nw || !nh || (cw === nw && ch === nh)) {
-    console.warn(`[WT Scale] 스케일업 SKIP: cw=${cw} ch=${ch} nw=${nw} nh=${nh}`);
-    return blocks;
-  }
+  if (!cw || !ch || !nw || !nh || (cw === nw && ch === nh)) return blocks;
 
   const sx = nw / cw;
   const sy = nh / ch;
-  console.log(`[WT Scale] sx=${sx.toFixed(3)} sy=${sy.toFixed(3)}`);
 
   return (blocks || []).map(block => {
     if (!block.eraseBox) return block;
     const b = block.eraseBox;
-    const scaled = {
-      x: Math.round(b.x * sx),
-      y: Math.round(b.y * sy),
-      width: Math.round(b.width * sx),
-      height: Math.round(b.height * sy),
-      _wasNormalized: b._wasNormalized,
+    return {
+      ...block,
+      eraseBox: {
+        x: Math.round(b.x * sx),
+        y: Math.round(b.y * sy),
+        width: Math.round(b.width * sx),
+        height: Math.round(b.height * sy),
+        _wasNormalized: b._wasNormalized,
+      },
     };
-    console.log(`[WT Scale] block eraseBox: (${b.x},${b.y},${b.width},${b.height}) → (${scaled.x},${scaled.y},${scaled.width},${scaled.height})`);
-    return { ...block, eraseBox: scaled };
   });
 }
 
