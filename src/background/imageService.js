@@ -19,24 +19,28 @@ function scaleBlocksToOriginal(blocks, message) {
   const ch = message.compressedHeight;
   const nw = message.naturalWidth;
   const nh = message.naturalHeight;
-  if (!cw || !ch || !nw || !nh || (cw === nw && ch === nh)) return blocks;
+  console.log(`[WT Scale] scaleBlocksToOriginal: cw=${cw} ch=${ch} nw=${nw} nh=${nh} blocksLen=${(blocks||[]).length}`);
+  if (!cw || !ch || !nw || !nh || (cw === nw && ch === nh)) {
+    console.warn(`[WT Scale] 스케일업 SKIP: cw=${cw} ch=${ch} nw=${nw} nh=${nh}`);
+    return blocks;
+  }
 
   const sx = nw / cw;
   const sy = nh / ch;
+  console.log(`[WT Scale] sx=${sx.toFixed(3)} sy=${sy.toFixed(3)}`);
 
   return (blocks || []).map(block => {
     if (!block.eraseBox) return block;
     const b = block.eraseBox;
-    return {
-      ...block,
-      eraseBox: {
-        x: Math.round(b.x * sx),
-        y: Math.round(b.y * sy),
-        width: Math.round(b.width * sx),
-        height: Math.round(b.height * sy),
-        _wasNormalized: b._wasNormalized,
-      },
+    const scaled = {
+      x: Math.round(b.x * sx),
+      y: Math.round(b.y * sy),
+      width: Math.round(b.width * sx),
+      height: Math.round(b.height * sy),
+      _wasNormalized: b._wasNormalized,
     };
+    console.log(`[WT Scale] block eraseBox: (${b.x},${b.y},${b.width},${b.height}) → (${scaled.x},${scaled.y},${scaled.width},${scaled.height})`);
+    return { ...block, eraseBox: scaled };
   });
 }
 
@@ -183,91 +187,28 @@ export async function handleStandardTranslation(message, sender) {
     }));
     result = scaleBlocksToOriginal(result, message);
 
-  } else if (engine === "openai") {
-    /* ── A안: 탐지는 Gemini, 번역은 OpenAI ──────────────────────────
-     * GPT는 바운딩박스 좌표 정밀도가 낮음 (학습 미포함)
-     * → Gemini로 정확한 말풍선 위치/원문 추출 후 OpenAI로 번역만 수행
-     * Gemini 키가 없으면 GPT 단독 fallback (B안)
-     * ─────────────────────────────────────────────────────────────── */
-    const geminiKey = message.apiKey || "";
-    const geminiModel = message.imageStdGeminiModel || "";
-
-    if (geminiKey && geminiModel) {
-      console.log("[WT Standard] 2-pass: Gemini 탐지 → OpenAI 번역");
-
-      // Step 1: Gemini로 위치 탐지 + 원문 추출 (번역 결과는 임시)
-      const geminiBlocks = await translateImageWithVision({
-        base64DataUrl,
-        naturalWidth: message.compressedWidth || message.naturalWidth,
-        naturalHeight: message.compressedHeight || message.naturalHeight,
-        mode: "gemini",
-        apiKey: geminiKey,
-        geminiModel,
-        targetLang: message.targetLang || "ko",
-      });
-
-      if (geminiBlocks && geminiBlocks.length > 0) {
-        // Step 2: Gemini 번역을 OpenAI 번역으로 교체
-        const texts = geminiBlocks.map(b => b.originalText || "");
-        const settings = await getSettings();
-        const openaiTranslations = await translateTextArray(texts, {
-          ...settings,
-          mode: "openai",
-          openaiApiKey: message.openaiApiKey || settings.openaiApiKey || "",
-          openaiModel: message.imageStdOpenAIModel || settings.openaiModel || "",
-          targetLang: message.targetLang || settings.targetLang || "ko",
-        });
-
-        // Step 3: Gemini 좌표 + OpenAI 번역 병합
-        result = geminiBlocks.map((b, i) => ({
-          ...b,
-          translatedText: openaiTranslations[i] || b.translatedText,
-        }));
-        console.log(`[WT Standard] 2-pass 완료: Gemini ${geminiBlocks.length}블록 → OpenAI 번역 ${openaiTranslations.length}개`);
-      } else {
-        // Gemini 탐지 실패 → GPT 단독 fallback
-        console.warn("[WT Standard] Gemini 탐지 없음 → GPT 단독 fallback");
-        result = await translateImageWithVision({
-          base64DataUrl,
-          naturalWidth: message.compressedWidth || message.naturalWidth,
-          naturalHeight: message.compressedHeight || message.naturalHeight,
-          mode: "openai",
-          openaiApiKey: message.openaiApiKey || "",
-          openaiModel: message.imageStdOpenAIModel || "",
-          targetLang: message.targetLang || "ko",
-        });
-      }
-    } else {
-      // Gemini API Key 없음 → GPT 단독 (B안: 0~1000 정규화 좌표 시도)
-      console.warn("[WT Standard] Gemini Key 없음 → GPT 단독 모드");
-      result = await translateImageWithVision({
-        base64DataUrl,
-        naturalWidth: message.compressedWidth || message.naturalWidth,
-        naturalHeight: message.compressedHeight || message.naturalHeight,
-        mode: "openai",
-        openaiApiKey: message.openaiApiKey || "",
-        openaiModel: message.imageStdOpenAIModel || "",
-        targetLang: message.targetLang || "ko",
-      });
-    }
-    result = scaleBlocksToOriginal(result, message);
-
   } else {
-    // Gemini / Other [Vision API] 방식: 1-Pass 직접 번역
-    const mode = engine === "other" ? "other_vision" : "gemini";
+    // Gemini / OpenAI / Other [Vision API] 방식: 1-Pass 직접 번역
+    const mode = engine === "openai" ? "openai"
+               : engine === "other" ? "other_vision"
+               : "gemini";
 
     result = await translateImageWithVision({
       base64DataUrl,
+      // AI가 실제로 본 이미지 치수로 좌표 역변환
       naturalWidth: message.compressedWidth || message.naturalWidth,
       naturalHeight: message.compressedHeight || message.naturalHeight,
       mode,
       apiKey: message.apiKey || "",
       geminiModel: message.imageStdGeminiModel || "",
+      openaiApiKey: message.openaiApiKey || "",
+      openaiModel: message.imageStdOpenAIModel || "",
       otherVisionUrl: message.imageStdOtherUrl || "",
       otherVisionKey: message.imageStdOtherKey || "",
       otherVisionModel: message.imageStdOtherModel || "",
       targetLang: message.targetLang || "ko",
     });
+    // 압축 좌표 → 원본 좌표로 스케일업
     result = scaleBlocksToOriginal(result, message);
   }
 
