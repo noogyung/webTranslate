@@ -1,5 +1,5 @@
 import { translateImageWithVision, locateBoundingBoxesWithVision } from "../api/image/vision.js";
-import { translatePremiumGemini, translatePremiumOpenAI, incrementImageCount } from "../api/image/imageTranslate.js";
+import { translatePremiumGemini, translatePremiumOpenAI, translateCropGemini, translateCropOpenAI, incrementImageCount } from "../api/image/imageTranslate.js";
 import { runCustomOcrServer } from "../api/image/customOcrServer.js";
 import { translateTextArray } from "./translationService.js";
 import { cleanOcrTextForTranslation } from "../utils/cleaner.js";
@@ -260,75 +260,192 @@ export async function handlePremiumTranslation(message, sender) {
 
   const engine = message.imagePremEngine || "gemini";
 
-  // ── Step 1: 엔진별 OCR 모델로 텍스트 번역 쌍 확보 ──────────
+  // ══════════════════════════════════════════════════════════════
+  // Step 1: PP-OCR (로컬 WASM) + LLM 텍스트 번역
+  // ══════════════════════════════════════════════════════════════
+  let translationPairs = [];
+  let ocrBlocks = [];
+  let useFallback = false;
+
+  try {
+    console.log("[WT Premium Hybrid] Step 1a: PP-OCR 실행...");
+    await ensureOffscreenDocument();
+    const ocrResult = await chrome.runtime.sendMessage({
+      action: "runFreeOcr",
+      imageDataUrl: base64DataUrl,
+      lang: guessSourceLang(message.targetLang),
+    });
+
+    if (!ocrResult?.success || !ocrResult.blocks?.length) {
+      console.warn("[WT Premium Hybrid] PP-OCR 미검출 → 기존 방식 폴백");
+      useFallback = true;
+    } else {
+      ocrBlocks = ocrResult.blocks;
+      console.log(`[WT Premium Hybrid] Step 1a 완료: ${ocrBlocks.length}개 블록`);
+
+      // Step 1b: LLM 텍스트 번역
+      console.log("[WT Premium Hybrid] Step 1b: LLM 텍스트 번역...");
+      const settings = await getSettings();
+      const texts = ocrBlocks
+        .map(b => cleanOcrTextForTranslation(b.text))
+        .filter(t => t.length > 0);
+      const translations = await translateTextArray(texts, settings);
+
+      translationPairs = ocrBlocks.map((block, i) => ({
+        original: block.text,
+        translated: translations[i] || block.text,
+        bbox: block.bbox,
+      }));
+      console.log(`[WT Premium Hybrid] Step 1b 완료: ${translationPairs.length}개 번역 쌍`);
+    }
+  } catch (ocrErr) {
+    console.warn("[WT Premium Hybrid] Step 1 실패 → 기존 방식 폴백:", ocrErr.message);
+    useFallback = true;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 폴백: 기존 전체 이미지 방식 (PP-OCR 미검출/실패 시)
+  // ══════════════════════════════════════════════════════════════
+  if (useFallback) {
+    console.log("[WT Premium Hybrid] 폴백: 기존 전체 이미지 방식 실행");
+    return await handlePremiumFallback(base64DataUrl, engine, message);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Step 2: 박스별 크롭 → Image Gen API → 번역 크롭
+  // ══════════════════════════════════════════════════════════════
+  console.log(`[WT Premium Hybrid] Step 2: ${translationPairs.length}개 크롭 → ${engine} Image Gen`);
+
+  // 2a. Offscreen에서 크롭 생성
+  const boxes = translationPairs.map(p => p.bbox);
+  const cropResult = await chrome.runtime.sendMessage({
+    action: "cropBoxes",
+    imageDataUrl: base64DataUrl,
+    boxes,
+    padding: 15,
+  });
+  if (!cropResult?.success) throw new Error("크롭 생성 실패: " + (cropResult?.error || "unknown"));
+  const crops = cropResult.crops;
+  console.log(`[WT Premium Hybrid] 크롭 생성 완료: ${crops.length}개`);
+
+  // 2b. 크롭별 Image Gen API 호출 (세마포어 3개 병렬)
+  const translatedCrops = await runWithConcurrency(
+    translationPairs.map((pair, i) => async () => {
+      const crop = crops[i];
+      console.log(`[WT Premium Hybrid] 크롭#${i} "${pair.original.substring(0, 20)}" → "${pair.translated.substring(0, 20)}"`);
+      try {
+        let translatedDataUrl;
+        if (engine === "openai") {
+          translatedDataUrl = await translateCropOpenAI({
+            base64DataUrl: crop.dataUrl,
+            apiKey: message.openaiApiKey || "",
+            model: message.imagePremOpenAISynthModel || "gpt-image-2",
+            originalText: pair.original,
+            translatedText: pair.translated,
+            targetLang: message.targetLang || "ko",
+          });
+        } else {
+          translatedDataUrl = await translateCropGemini({
+            base64DataUrl: crop.dataUrl,
+            apiKey: message.apiKey || "",
+            model: message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
+            originalText: pair.original,
+            translatedText: pair.translated,
+            targetLang: message.targetLang || "ko",
+          });
+        }
+        return { bbox: crop.bbox, dataUrl: translatedDataUrl };
+      } catch (e) {
+        console.warn(`[WT Premium Hybrid] 크롭#${i} 실패:`, e.message);
+        return null; // 실패한 크롭은 원본 유지
+      }
+    }),
+    3 // 최대 동시 실행 수
+  );
+
+  const successCrops = translatedCrops.filter(c => c !== null);
+  console.log(`[WT Premium Hybrid] Step 2 완료: ${successCrops.length}/${translationPairs.length} 성공`);
+
+  // ══════════════════════════════════════════════════════════════
+  // Step 3: Offscreen에서 합성
+  // ══════════════════════════════════════════════════════════════
+  if (successCrops.length === 0) {
+    throw new Error("모든 크롭 번역이 실패했습니다.");
+  }
+
+  const compositeResult = await chrome.runtime.sendMessage({
+    action: "compositeCrops",
+    originalDataUrl: base64DataUrl,
+    crops: successCrops,
+  });
+  if (!compositeResult?.success) throw new Error("합성 실패: " + (compositeResult?.error || "unknown"));
+
+  console.log("[WT Premium Hybrid] Step 3 합성 완료");
+  await incrementImageCount("premium");
+  return compositeResult.dataUrl;
+}
+
+/**
+ * 세마포어 기반 동시 실행 제한.
+ */
+async function runWithConcurrency(tasks, limit = 3) {
+  const results = [];
+  const executing = new Set();
+
+  for (const task of tasks) {
+    const p = task().then(result => {
+      executing.delete(p);
+      return result;
+    });
+    executing.add(p);
+    results.push(p);
+    if (executing.size >= limit) await Promise.race(executing);
+  }
+  return Promise.all(results);
+}
+
+/**
+ * 기존 전체 이미지 방식 폴백 (PP-OCR 미검출/실패 시).
+ */
+async function handlePremiumFallback(base64DataUrl, engine, message) {
+  // Step 1 폴백: Vision API OCR
   let translationPairs = [];
   try {
-    console.log(`[WT Premium] Step 1: ${engine} OCR 시작...`);
-
-    // Step 1 OCR 모드 결정 (Other의 경우 vision_api 모드로 1-Pass)
-    const step1Mode = engine === "openai" ? "openai"
-                    : engine === "other"  ? "other_vision"
-                    : "gemini";
-
+    const step1Mode = engine === "openai" ? "openai" : engine === "other" ? "other_vision" : "gemini";
     const ocrBlocks = await translateImageWithVision({
       base64DataUrl,
       naturalWidth: message.naturalWidth || 0,
       naturalHeight: message.naturalHeight || 0,
       mode: step1Mode,
-      // ── Gemini OCR 모델 (Step 1 전용) ──
       apiKey: message.apiKey || "",
       geminiModel: message.imagePremGeminiOcrModel || "",
-      // ── OpenAI OCR 모델 (Step 1 전용) ──
       openaiApiKey: message.openaiApiKey || "",
       openaiModel: message.imagePremOpenAIOcrModel || "",
-      // ── Other Vision API (OCR 역할) ──
       otherVisionUrl: message.imagePremOtherUrl || "",
       otherVisionKey: message.imagePremOtherKey || "",
       otherVisionModel: message.imagePremOtherOcrModel || "",
       targetLang: message.targetLang || "ko",
     });
-
     translationPairs = ocrBlocks
       .filter(b => b.originalText?.trim() && b.translatedText?.trim())
       .map(b => ({ original: b.originalText, translated: b.translatedText }));
-
-    console.log(`[WT Premium] Step 1 완료: ${translationPairs.length}개 번역 쌍`);
-  } catch (ocrErr) {
-    console.warn("[WT Premium] Step 1 실패 — 직접 번역(폴백)으로 진행:", ocrErr.message);
+  } catch (e) {
+    console.warn("[WT Premium] 폴백 Step 1도 실패:", e.message);
   }
 
-  // ── Step 2: 엔진별 합성 모델로 이미지 생성 ──────────────────
-  console.log(`[WT Premium] Step 2: ${engine} 이미지 합성 (${translationPairs.length}쌍 주입)`);
+  // Step 2: 전체 이미지 방식
   let translatedDataUrl;
-
   if (engine === "openai") {
     translatedDataUrl = await translatePremiumOpenAI({
-      base64DataUrl,
-      apiKey: message.openaiApiKey || "",
+      base64DataUrl, apiKey: message.openaiApiKey || "",
       model: message.imagePremOpenAISynthModel || "gpt-image-2",
-      targetLang: message.targetLang || "ko",
-      translationPairs,
-    });
-  } else if (engine === "other") {
-    // Other 고급: 사설 이미지 생성 서버 (SD WebUI / ComfyUI / OpenAI Edit 호환)
-    // 현재는 OpenAI images/edits 규격으로 사설 서버에 위임
-    translatedDataUrl = await translatePremiumOpenAI({
-      base64DataUrl,
-      apiKey: message.imagePremOtherKey || "",
-      model: message.imagePremOtherSynthModel || "sd_inpainting_model",
-      targetLang: message.targetLang || "ko",
-      translationPairs,
-      // 사설 서버 URL 오버라이드 (imageTranslate.js가 지원하면 사용)
-      overrideUrl: message.imagePremOtherUrl || "",
+      targetLang: message.targetLang || "ko", translationPairs,
     });
   } else {
-    // Gemini (기본)
     translatedDataUrl = await translatePremiumGemini({
-      base64DataUrl,
-      apiKey: message.apiKey || "",
+      base64DataUrl, apiKey: message.apiKey || "",
       model: message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
-      targetLang: message.targetLang || "ko",
-      translationPairs,
+      targetLang: message.targetLang || "ko", translationPairs,
     });
   }
 

@@ -509,4 +509,102 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// ── 크롭/합성 메시지 핸들러 (고급 하이브리드 파이프라인용) ──
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "cropBoxes") {
+    cropBoxes(message.imageDataUrl, message.boxes, message.padding || 10)
+      .then(crops => sendResponse({ success: true, crops }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
+
+  if (message.action === "compositeCrops") {
+    compositeCrops(message.originalDataUrl, message.crops)
+      .then(dataUrl => sendResponse({ success: true, dataUrl }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
+});
+
+/**
+ * 원본 이미지에서 bbox별 크롭 생성.
+ * @param {string} imageDataUrl - 원본 이미지 base64
+ * @param {Array<{x,y,width,height}>} boxes - 크롭 영역 배열
+ * @param {number} padding - 주변 여백 (px)
+ * @returns {Array<{bbox, dataUrl}>} 크롭 결과
+ */
+async function cropBoxes(imageDataUrl, boxes, padding) {
+  const img = await loadImageBitmap(imageDataUrl);
+  const crops = [];
+
+  for (const box of boxes) {
+    // 패딩 적용 (이미지 경계 클램프)
+    const x = Math.max(0, box.x - padding);
+    const y = Math.max(0, box.y - padding);
+    const x2 = Math.min(img.width, box.x + box.width + padding);
+    const y2 = Math.min(img.height, box.y + box.height + padding);
+    const w = x2 - x;
+    const h = y2 - y;
+
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+
+    const blob = await canvas.convertToBlob({ type: "image/png" });
+    const reader = new FileReader();
+    const dataUrl = await new Promise(resolve => {
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+
+    crops.push({
+      bbox: { x, y, width: w, height: h },
+      originalBbox: box,
+      dataUrl,
+    });
+  }
+
+  console.log(`[OCR Worker] 크롭 완료: ${crops.length}개 (padding=${padding}px)`);
+  img.close();
+  return crops;
+}
+
+/**
+ * 번역된 크롭들을 원본 이미지 위에 합성.
+ * @param {string} originalDataUrl - 원본 이미지 base64
+ * @param {Array<{bbox:{x,y,width,height}, dataUrl:string}>} crops - 번역된 크롭 배열
+ * @returns {string} 합성된 이미지 base64 dataUrl
+ */
+async function compositeCrops(originalDataUrl, crops) {
+  const bgImg = await loadImageBitmap(originalDataUrl);
+  const canvas = new OffscreenCanvas(bgImg.width, bgImg.height);
+  const ctx = canvas.getContext("2d");
+
+  // 원본 이미지 배경
+  ctx.drawImage(bgImg, 0, 0);
+  bgImg.close();
+
+  // 번역된 크롭 오버레이
+  for (const crop of crops) {
+    try {
+      const cropImg = await loadImageBitmap(crop.dataUrl);
+      ctx.drawImage(cropImg, crop.bbox.x, crop.bbox.y, crop.bbox.width, crop.bbox.height);
+      cropImg.close();
+    } catch (e) {
+      console.warn("[OCR Worker] 크롭 합성 실패:", e.message, crop.bbox);
+    }
+  }
+
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.95 });
+  const reader = new FileReader();
+  const dataUrl = await new Promise(resolve => {
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+
+  console.log(`[OCR Worker] 합성 완료: ${crops.length}개 크롭 → ${bgImg.width || "?"}×${bgImg.height || "?"}px`);
+  return dataUrl;
+}
+
 console.log("[OCR Worker] Offscreen OCR Worker 초기화 완료 — ort 존재:", typeof ort !== "undefined");

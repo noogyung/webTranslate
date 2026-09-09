@@ -50,6 +50,26 @@ export function buildWebtoonPrompt(targetLang, translationPairs = []) {
 }
 
 /**
+ * 크롭 이미지 전용 프롬프트 (하이브리드 파이프라인).
+ * 단일 텍스트 영역의 교체만 요청하므로 간소화.
+ */
+export function buildCropPrompt(originalText, translatedText, targetLang) {
+  const langName = getLanguageName(targetLang);
+  return (
+    `You are a professional manga/webtoon image editor.\n\n` +
+    `This image contains a small text region from a manga/webtoon page.\n` +
+    `Replace the text "${originalText}" with the ${langName} translation "${translatedText}".\n\n` +
+    `RULES:\n` +
+    `- PRESERVE the background art, speech bubble, and surrounding elements EXACTLY.\n` +
+    `- Match the original font style, size, weight, and color as closely as possible.\n` +
+    `- The translated text must fit within the same area without overflow.\n` +
+    `- For SFX (sound effects): Match the original artistic style.\n` +
+    `- Do NOT add watermarks, borders, or artifacts.\n` +
+    `- Output ONLY the modified image.`
+  );
+}
+
+/**
  * 고급 모드: Gemini Image-to-Image 번역.
  * @param {Array} translationPairs - 사전 번역 쌍 (2단계 파이프라인)
  */
@@ -113,6 +133,88 @@ export async function translatePremiumGemini({ base64DataUrl, apiKey, model, tar
   }
 
   return `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+}
+
+/**
+ * 크롭 단위 Gemini Image-to-Image 번역 (하이브리드 파이프라인).
+ */
+export async function translateCropGemini({ base64DataUrl, apiKey, model, originalText, translatedText, targetLang }) {
+  const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
+  const base64Data = base64DataUrl.split(",")[1];
+  const prompt = buildCropPrompt(originalText, translatedText, targetLang);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64Data } }
+        ]
+      }],
+      generationConfig: {
+        response_modalities: ["IMAGE"],
+        temperature: 0.2
+      }
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => null);
+    throw new Error(`Gemini Crop API 오류 (${response.status}): ${errJson?.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inline_data);
+  if (!imagePart) throw new Error("Gemini Crop API: 이미지 미반환");
+  return `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+}
+
+/**
+ * 크롭 단위 OpenAI GPT Image 번역 (하이브리드 파이프라인).
+ */
+export async function translateCropOpenAI({ base64DataUrl, apiKey, model, originalText, translatedText, targetLang }) {
+  const prompt = buildCropPrompt(originalText, translatedText, targetLang);
+  const base64Data = base64DataUrl.split(",")[1];
+  const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
+  const byteChars = atob(base64Data);
+  const byteArray = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([byteArray], { type: mimeType });
+
+  const formData = new FormData();
+  formData.append("model", model || "gpt-image-2");
+  formData.append("prompt", prompt);
+  formData.append("image", blob, "crop.png");
+
+  const response = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: formData,
+    signal: AbortSignal.timeout(60000),
+  });
+
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => null);
+    throw new Error(`OpenAI Crop API 오류 (${response.status}): ${errJson?.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+  if (data.data?.[0]?.url) {
+    const imgRes = await fetch(data.data[0].url);
+    const imgBlob = await imgRes.blob();
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(imgBlob);
+    });
+  }
+  throw new Error("OpenAI Crop API: 이미지 미반환");
 }
 
 /**
