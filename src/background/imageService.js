@@ -250,6 +250,7 @@ export async function handleStandardTranslation(message, sender) {
 }
 
 export async function handlePremiumTranslation(message, sender) {
+  const T = { start: Date.now() };
   let base64DataUrl = message.imageUrl;
   if (!base64DataUrl.startsWith("data:")) {
     base64DataUrl = await fetchImageAsBase64(
@@ -268,6 +269,7 @@ export async function handlePremiumTranslation(message, sender) {
   let useFallback = false;
 
   try {
+    T.ocr0 = Date.now();
     console.log("[WT Premium Hybrid] Step 1a: PP-OCR 실행...");
     await ensureOffscreenDocument();
     const ocrResult = await chrome.runtime.sendMessage({
@@ -275,28 +277,37 @@ export async function handlePremiumTranslation(message, sender) {
       imageDataUrl: base64DataUrl,
       lang: guessSourceLang(message.targetLang),
     });
+    T.ocr1 = Date.now();
 
     if (!ocrResult?.success || !ocrResult.blocks?.length) {
       console.warn("[WT Premium Hybrid] PP-OCR 미검출 → 기존 방식 폴백");
       useFallback = true;
     } else {
       ocrBlocks = ocrResult.blocks;
-      console.log(`[WT Premium Hybrid] Step 1a 완료: ${ocrBlocks.length}개 블록`);
+      console.log(`[WT Premium Hybrid] Step 1a 완료: ${ocrBlocks.length}개 블록 (${T.ocr1 - T.ocr0}ms)`);
 
       // Step 1b: LLM 텍스트 번역
+      T.llm0 = Date.now();
       console.log("[WT Premium Hybrid] Step 1b: LLM 텍스트 번역...");
       const settings = await getSettings();
       const texts = ocrBlocks
         .map(b => cleanOcrTextForTranslation(b.text))
         .filter(t => t.length > 0);
       const translations = await translateTextArray(texts, settings);
+      T.llm1 = Date.now();
 
       translationPairs = ocrBlocks.map((block, i) => ({
         original: block.text,
         translated: translations[i] || block.text,
         bbox: block.bbox,
       }));
-      console.log(`[WT Premium Hybrid] Step 1b 완료: ${translationPairs.length}개 번역 쌍`);
+
+      // 번역 미적용 경고
+      const untranslated = translationPairs.filter(p => p.original === p.translated).length;
+      if (untranslated > 0) {
+        console.warn(`[WT Premium Hybrid] ⚠️ ${untranslated}/${translationPairs.length}개 블록이 번역되지 않음 (원문=번역)`);
+      }
+      console.log(`[WT Premium Hybrid] Step 1b 완료: ${translationPairs.length}개 번역 쌍 (${T.llm1 - T.llm0}ms)`);
     }
   } catch (ocrErr) {
     console.warn("[WT Premium Hybrid] Step 1 실패 → 기존 방식 폴백:", ocrErr.message);
@@ -314,9 +325,7 @@ export async function handlePremiumTranslation(message, sender) {
   // ══════════════════════════════════════════════════════════════
   // Step 2: 스프라이트 시트 → Image Gen API 1회 호출 → 분할 → 합성
   // ══════════════════════════════════════════════════════════════
-  console.log(`[WT Premium Hybrid] Step 2: ${translationPairs.length}개 크롭 → 스프라이트 시트 → ${engine} Image Gen`);
-
-  // 2a. Offscreen에서 크롭 생성
+  T.crop0 = Date.now();
   const boxes = translationPairs.map(p => p.bbox);
   const cropResult = await chrome.runtime.sendMessage({
     action: "cropBoxes",
@@ -326,18 +335,22 @@ export async function handlePremiumTranslation(message, sender) {
   });
   if (!cropResult?.success) throw new Error("크롭 생성 실패: " + (cropResult?.error || "unknown"));
   const crops = cropResult.crops;
-  console.log(`[WT Premium Hybrid] 크롭 생성 완료: ${crops.length}개`);
+  T.crop1 = Date.now();
+  console.log(`[WT Premium Hybrid] 크롭 생성: ${crops.length}개 (${T.crop1 - T.crop0}ms)`);
 
   // 2b. 스프라이트 시트 빌드
+  T.sprite0 = Date.now();
   const spriteResult = await chrome.runtime.sendMessage({
     action: "buildSpriteSheet",
     crops,
     gap: 4,
   });
   if (!spriteResult?.success) throw new Error("스프라이트 빌드 실패: " + (spriteResult?.error || "unknown"));
-  console.log(`[WT Premium Hybrid] 스프라이트 시트: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px`);
+  T.sprite1 = Date.now();
+  console.log(`[WT Premium Hybrid] 스프라이트 빌드: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px (${T.sprite1 - T.sprite0}ms)`);
 
   // 2c. 스프라이트 시트 1회 API 호출
+  T.api0 = Date.now();
   let translatedSpriteUrl;
   if (engine === "openai") {
     translatedSpriteUrl = await translateSpriteOpenAI({
@@ -357,9 +370,11 @@ export async function handlePremiumTranslation(message, sender) {
       targetLang: message.targetLang || "ko",
     });
   }
-  console.log("[WT Premium Hybrid] 스프라이트 번역 완료");
+  T.api1 = Date.now();
+  console.log(`[WT Premium Hybrid] Image Gen API: ${T.api1 - T.api0}ms`);
 
   // 2d. 번역된 스프라이트 분할
+  T.split0 = Date.now();
   const cropBboxes = crops.map(c => c.bbox);
   const splitResult = await chrome.runtime.sendMessage({
     action: "splitSpriteSheet",
@@ -368,19 +383,30 @@ export async function handlePremiumTranslation(message, sender) {
     cropBboxes,
   });
   if (!splitResult?.success) throw new Error("스프라이트 분할 실패: " + (splitResult?.error || "unknown"));
-  console.log(`[WT Premium Hybrid] 분할 완료: ${splitResult.crops.length}개 크롭`);
+  T.split1 = Date.now();
+  console.log(`[WT Premium Hybrid] 스프라이트 분할: ${splitResult.crops.length}개 (${T.split1 - T.split0}ms)`);
 
   // ══════════════════════════════════════════════════════════════
   // Step 3: Offscreen에서 합성
   // ══════════════════════════════════════════════════════════════
+  T.comp0 = Date.now();
   const compositeResult = await chrome.runtime.sendMessage({
     action: "compositeCrops",
     originalDataUrl: base64DataUrl,
     crops: splitResult.crops,
   });
   if (!compositeResult?.success) throw new Error("합성 실패: " + (compositeResult?.error || "unknown"));
+  T.comp1 = Date.now();
 
-  console.log("[WT Premium Hybrid] Step 3 합성 완료");
+  const total = T.comp1 - T.start;
+  console.log(
+    `[WT Premium Hybrid] ✅ 완료 — 총 ${total}ms\n` +
+    `  PP-OCR: ${(T.ocr1 - T.ocr0)}ms | LLM번역: ${(T.llm1 - T.llm0)}ms\n` +
+    `  크롭: ${(T.crop1 - T.crop0)}ms | 스프라이트: ${(T.sprite1 - T.sprite0)}ms\n` +
+    `  Image Gen API: ${(T.api1 - T.api0)}ms\n` +
+    `  분할: ${(T.split1 - T.split0)}ms | 합성: ${(T.comp1 - T.comp0)}ms`
+  );
+
   await incrementImageCount("premium");
   return compositeResult.dataUrl;
 }
