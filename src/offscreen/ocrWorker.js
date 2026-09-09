@@ -623,9 +623,10 @@ async function compositeCrops(originalDataUrl, crops) {
 
 /**
  * 크롭들을 세로로 쌓아 스프라이트 시트 생성.
+ * API 출력 사이즈 왜곡 방지를 위해 표준 사이즈로 패딩.
  * @param {Array<{dataUrl, bbox}>} crops - 크롭 배열
  * @param {number} gap - 크롭 간 간격 (px)
- * @returns {{ dataUrl, layout: {regions, spriteWidth, spriteHeight} }}
+ * @returns {{ dataUrl, layout, apiSize }}
  */
 async function buildSpriteSheet(crops, gap) {
   // 각 크롭 이미지 로드 + 치수 파악
@@ -635,30 +636,64 @@ async function buildSpriteSheet(crops, gap) {
     images.push({ img, width: img.width, height: img.height, bbox: crop.bbox });
   }
 
-  const maxWidth = Math.max(...images.map(i => i.width));
-  let totalHeight = 0;
+  const contentWidth = Math.max(...images.map(i => i.width));
+  let contentHeight = 0;
   const regions = [];
 
   for (let i = 0; i < images.length; i++) {
-    regions.push({ y: totalHeight, width: images[i].width, height: images[i].height });
-    totalHeight += images[i].height;
-    if (i < images.length - 1) totalHeight += gap;
+    regions.push({ y: contentHeight, width: images[i].width, height: images[i].height });
+    contentHeight += images[i].height;
+    if (i < images.length - 1) contentHeight += gap;
   }
 
-  // 캔버스에 세로 스택 + 구분선
-  const canvas = new OffscreenCanvas(maxWidth, totalHeight);
+  // 표준 API 사이즈 선택 (OpenAI gpt-image-2: 1024×1024, 1024×1536, 1536×1024)
+  const STANDARD_SIZES = [
+    { w: 1024, h: 1024 },
+    { w: 1024, h: 1536 },
+    { w: 1536, h: 1024 },
+  ];
+
+  // 콘텐츠가 들어가는 최소 표준 사이즈 선택
+  let bestSize = STANDARD_SIZES.find(s => contentWidth <= s.w && contentHeight <= s.h);
+  if (!bestSize) {
+    // 표준 사이즈에 안 들어가면 비례 축소
+    const scale = Math.min(1536 / contentWidth, 1536 / contentHeight);
+    bestSize = contentWidth > contentHeight
+      ? { w: 1536, h: 1024 }
+      : { w: 1024, h: 1536 };
+    // 리전 좌표 축소
+    for (const r of regions) {
+      r.y = Math.round(r.y * scale);
+      r.width = Math.round(r.width * scale);
+      r.height = Math.round(r.height * scale);
+    }
+    contentHeight = Math.round(contentHeight * scale);
+  }
+
+  const canvasW = bestSize.w;
+  const canvasH = bestSize.h;
+
+  // 캔버스 생성 (패딩 영역은 회색)
+  const canvas = new OffscreenCanvas(canvasW, canvasH);
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#E8E8E8";
-  ctx.fillRect(0, 0, maxWidth, totalHeight);
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // 콘텐츠를 좌상단에 배치
+  const scaleX = bestSize === STANDARD_SIZES.find(s => contentWidth <= s.w && contentHeight <= s.h) ? 1 : Math.min(canvasW / contentWidth, canvasH / contentHeight);
 
   for (let i = 0; i < images.length; i++) {
-    ctx.drawImage(images[i].img, 0, regions[i].y);
+    const drawW = Math.round(images[i].width * scaleX);
+    const drawH = Math.round(images[i].height * scaleX);
+    const drawY = Math.round(regions[i].y);
+    ctx.drawImage(images[i].img, 0, drawY, drawW, drawH);
     images[i].img.close();
 
-    // 구분선 (마지막 크롭 제외)
+    // 구분선
     if (i < images.length - 1 && gap > 0) {
       ctx.fillStyle = "#808080";
-      ctx.fillRect(0, regions[i].y + regions[i].height, maxWidth, gap);
+      ctx.fillRect(0, drawY + drawH, canvasW, Math.round(gap * scaleX));
+      ctx.fillStyle = "#E8E8E8";
     }
   }
 
@@ -669,9 +704,17 @@ async function buildSpriteSheet(crops, gap) {
     reader.readAsDataURL(blob);
   });
 
-  const layout = { regions, spriteWidth: maxWidth, spriteHeight: totalHeight, gap };
-  console.log(`[OCR Worker] 스프라이트 시트: ${maxWidth}×${totalHeight}px (${crops.length}개 크롭, gap=${gap})`);
-  return { dataUrl, layout };
+  const layout = {
+    regions,
+    spriteWidth: canvasW,
+    spriteHeight: canvasH,
+    contentWidth: Math.round(contentWidth * scaleX),
+    contentHeight: Math.round(contentHeight * scaleX),
+    gap,
+  };
+  const apiSize = `${canvasW}x${canvasH}`;
+  console.log(`[OCR Worker] 스프라이트 시트: ${canvasW}×${canvasH}px (콘텐츠: ${layout.contentWidth}×${layout.contentHeight}, ${crops.length}개 크롭, gap=${gap})`);
+  return { dataUrl, layout, apiSize };
 }
 
 /**

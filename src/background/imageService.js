@@ -346,6 +346,7 @@ export async function handlePremiumTranslation(message, sender) {
       model: message.imagePremOpenAISynthModel || "gpt-image-2",
       translationPairs,
       targetLang: message.targetLang || "ko",
+      apiSize: spriteResult.apiSize,
     });
   } else {
     translatedSpriteUrl = await translateSpriteGemini({

@@ -138,7 +138,7 @@ export async function translateSpriteGemini({ base64DataUrl, apiKey, model, tran
 /**
  * 스프라이트 시트 OpenAI GPT Image 번역 (1회 API 호출).
  */
-export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, translationPairs, targetLang }) {
+export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, translationPairs, targetLang, apiSize }) {
   const prompt = buildSpritePrompt(translationPairs, targetLang);
   const base64Data = base64DataUrl.split(",")[1];
   const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
@@ -151,6 +151,8 @@ export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, tran
   formData.append("model", model || "gpt-image-2");
   formData.append("prompt", prompt);
   formData.append("image", blob, "sprite.png");
+  if (apiSize) formData.append("size", apiSize);
+  formData.append("response_format", "b64_json");
 
   const response = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
