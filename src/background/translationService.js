@@ -105,3 +105,33 @@ export function handleWordDictionary(message) {
     extraUrl
   );
 }
+
+/**
+ * 이미지 번역 파이프라인용 텍스트 배열 일괄 번역 헬퍼.
+ * imageService.js에서 스토리지 설정 객체를 그대로 받아 메인 번역기로 위임.
+ * @param {string[]} texts - 번역할 원문 텍스트 배열
+ * @param {Object} settings - getSettings() 반환값 (translationMode, geminiApiKey 등 포함)
+ * @returns {Promise<string[]>} 번역된 텍스트 배열 (순서 보장)
+ */
+export async function translateTextArray(texts, settings) {
+  if (!texts || texts.length === 0) return [];
+  const result = await handleTranslation({
+    texts,
+    targetLang: settings.targetLang || "ko",
+    mode: settings.translationMode || "google",
+    apiKey: settings.geminiApiKey || "",
+    geminiModel: settings.geminiModel || "",
+    openaiApiKey: settings.openaiApiKey || "",
+    openaiModel: settings.openaiModel || "",
+    claudeApiKey: settings.claudeApiKey || "",
+    claudeModel: settings.claudeModel || "",
+    ollamaUrl: settings.ollamaUrl || "http://localhost:11434",
+    ollamaModel: settings.ollamaModel || "qwen2.5",
+    ollamaCustomPrompt: settings.ollamaCustomPrompt || "",
+    libreUrl: settings.libreUrl || "http://localhost:5000",
+    customApiUrl: settings.customApiUrl || "",
+    customApiKey: settings.customApiKey || "",
+    customModel: settings.customModel || "",
+  });
+  return result.translations || [];
+}

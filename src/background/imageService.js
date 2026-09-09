@@ -1,5 +1,9 @@
-import { translateImageWithVision, locateBoundingBoxesWithVision } from "../api/index.js";
-import { translatePremiumGemini, translatePremiumOpenAI, incrementImageCount } from "../api/imageTranslate.js";
+import { translateImageWithVision, locateBoundingBoxesWithVision } from "../api/image/vision.js";
+import { translatePremiumGemini, translatePremiumOpenAI, incrementImageCount } from "../api/image/imageTranslate.js";
+import { runCustomOcrServer } from "../api/image/customOcrServer.js";
+import { translateTextArray } from "./translationService.js";
+import { cleanOcrTextForTranslation } from "../utils/cleaner.js";
+import { getSettings } from "../options/storage.js";
 
 /* ── Step D: 세션 내 번역 결과 LRU 캐시 (최대 20개) ─────────── */
 const _translationCache = new Map();
@@ -72,8 +76,8 @@ export async function handleImageTranslation(message, sender) {
 }
 
 export async function handleStandardTranslation(message, sender) {
-  // Step D: 캐시 조회 (URL + targetLang 키)
-  const cacheKey = `${message.imageUrl}::${message.targetLang || "ko"}`;
+  // LRU 캐시 조회
+  const cacheKey = `${message.imageUrl}::${message.targetLang || "ko"}::${message.imageStdEngine || "gemini"}`;
   const cached = cacheGet(cacheKey);
   if (cached) {
     console.log("[WT Cache] 캐시 HIT — 즉시 반환");
@@ -81,23 +85,79 @@ export async function handleStandardTranslation(message, sender) {
   }
 
   let base64DataUrl = message.imageUrl;
-
   if (!base64DataUrl.startsWith("data:")) {
-    const refererUrl = message.pageUrl || sender?.tab?.url || "";
-    base64DataUrl = await fetchImageAsBase64(message.imageUrl, refererUrl);
+    base64DataUrl = await fetchImageAsBase64(
+      message.imageUrl,
+      message.pageUrl || sender?.tab?.url || ""
+    );
   }
 
-  const result = await translateImageWithVision({
-    base64DataUrl,
-    naturalWidth: message.naturalWidth,
-    naturalHeight: message.naturalHeight,
-    mode: message.mode || "gemini",
-    apiKey: message.apiKey || "",
-    geminiModel: message.geminiModel || "gemini-3.6-flash",
-    openaiApiKey: message.openaiApiKey || "",
-    openaiModel: message.openaiModel || "gpt-4o-mini",
-    targetLang: message.targetLang || "ko",
-  });
+  const engine = message.imageStdEngine || "gemini";
+  let result;
+
+  if (engine === "free") {
+    // Free: PP-OCRv6 WASM (content script 측에서 처리, 여기서는 타임아웃 없이 패스)
+    // content script가 직접 오버레이 렌더링까지 처리하므로 background는 번역만 담당
+    // message.ocrBlocks = [{text, bbox}] 형식으로 이미 받은 상태
+    const settings = await getSettings();
+    const texts = (message.ocrBlocks || [])
+      .map(b => cleanOcrTextForTranslation(b.text))
+      .filter(t => t.length > 0);
+
+    const translations = await translateTextArray(texts, settings);
+
+    result = (message.ocrBlocks || []).map((block, i) => ({
+      originalText: block.text,
+      translatedText: translations[i] || block.text,
+      eraseBox: block.bbox,
+      orientation: "horizontal",
+    }));
+
+  } else if (engine === "other" && message.imageStdOtherType === "ocr_server") {
+    // Other [OCR 서버] 방식: 사설 OCR 서버 → 메인 번역기 위임
+    const ocrBlocks = await runCustomOcrServer({
+      base64DataUrl,
+      serverUrl: message.imageStdOtherUrl || "",
+      apiKey: message.imageStdOtherKey || "",
+      naturalWidth: message.naturalWidth,
+      naturalHeight: message.naturalHeight,
+    });
+
+    const settings = await getSettings();
+    const texts = ocrBlocks
+      .map(b => cleanOcrTextForTranslation(b.text))
+      .filter(t => t.length > 0);
+
+    const translations = await translateTextArray(texts, settings);
+
+    result = ocrBlocks.map((block, i) => ({
+      originalText: block.text,
+      translatedText: translations[i] || block.text,
+      eraseBox: block.bbox,
+      orientation: "horizontal",
+    }));
+
+  } else {
+    // Gemini / OpenAI / Other [Vision API] 방식: 1-Pass 직접 번역
+    const mode = engine === "openai" ? "openai"
+               : engine === "other" ? "other_vision"
+               : "gemini";
+
+    result = await translateImageWithVision({
+      base64DataUrl,
+      naturalWidth: message.naturalWidth,
+      naturalHeight: message.naturalHeight,
+      mode,
+      apiKey: message.apiKey || "",
+      geminiModel: message.imageStdGeminiModel || "",
+      openaiApiKey: message.openaiApiKey || "",
+      openaiModel: message.imageStdOpenAIModel || "",
+      otherVisionUrl: message.imageStdOtherUrl || "",
+      otherVisionKey: message.imageStdOtherKey || "",
+      otherVisionModel: message.imageStdOtherModel || "",
+      targetLang: message.targetLang || "ko",
+    });
+  }
 
   cacheSet(cacheKey, result);
   await incrementImageCount("standard");
@@ -106,25 +166,40 @@ export async function handleStandardTranslation(message, sender) {
 
 export async function handlePremiumTranslation(message, sender) {
   let base64DataUrl = message.imageUrl;
-
   if (!base64DataUrl.startsWith("data:")) {
-    const refererUrl = message.pageUrl || sender?.tab?.url || "";
-    base64DataUrl = await fetchImageAsBase64(message.imageUrl, refererUrl);
+    base64DataUrl = await fetchImageAsBase64(
+      message.imageUrl,
+      message.pageUrl || sender?.tab?.url || ""
+    );
   }
 
-  // ── Step 1: OCR + 텍스트 번역으로 번역 쌍 확보 ─────────────
+  const engine = message.imagePremEngine || "gemini";
+
+  // ── Step 1: 엔진별 OCR 모델로 텍스트 번역 쌍 확보 ──────────
   let translationPairs = [];
   try {
-    console.log("[WT Premium] Step 1: OCR + 텍스트 번역 시작...");
+    console.log(`[WT Premium] Step 1: ${engine} OCR 시작...`);
+
+    // Step 1 OCR 모드 결정 (Other의 경우 vision_api 모드로 1-Pass)
+    const step1Mode = engine === "openai" ? "openai"
+                    : engine === "other"  ? "other_vision"
+                    : "gemini";
+
     const ocrBlocks = await translateImageWithVision({
       base64DataUrl,
       naturalWidth: message.naturalWidth || 0,
       naturalHeight: message.naturalHeight || 0,
-      mode: message.mode || "gemini",
+      mode: step1Mode,
+      // ── Gemini OCR 모델 (Step 1 전용) ──
       apiKey: message.apiKey || "",
-      geminiModel: message.geminiModel || "gemini-3.6-flash",
+      geminiModel: message.imagePremGeminiOcrModel || "",
+      // ── OpenAI OCR 모델 (Step 1 전용) ──
       openaiApiKey: message.openaiApiKey || "",
-      openaiModel: message.openaiModel || "gpt-4o-mini",
+      openaiModel: message.imagePremOpenAIOcrModel || "",
+      // ── Other Vision API (OCR 역할) ──
+      otherVisionUrl: message.imagePremOtherUrl || "",
+      otherVisionKey: message.imagePremOtherKey || "",
+      otherVisionModel: message.imagePremOtherOcrModel || "",
       targetLang: message.targetLang || "ko",
     });
 
@@ -132,35 +207,41 @@ export async function handlePremiumTranslation(message, sender) {
       .filter(b => b.originalText?.trim() && b.translatedText?.trim())
       .map(b => ({ original: b.originalText, translated: b.translatedText }));
 
-    console.log(`[WT Premium] Step 1 완료: ${translationPairs.length}개 번역 쌍 확보`);
-    console.table(translationPairs.map((p, i) => ({
-      "#": i,
-      원문: p.original.substring(0, 30),
-      번역: p.translated.substring(0, 30),
-    })));
+    console.log(`[WT Premium] Step 1 완료: ${translationPairs.length}개 번역 쌍`);
   } catch (ocrErr) {
-    console.warn("[WT Premium] Step 1 OCR 실패 — 직접 번역(폴백)으로 진행:", ocrErr.message);
+    console.warn("[WT Premium] Step 1 실패 — 직접 번역(폴백)으로 진행:", ocrErr.message);
   }
 
-  // ── Step 2: 번역 쌍 주입 후 이미지 합성 ────────────────────
-  const engine = message.premiumEngine || "gemini";
+  // ── Step 2: 엔진별 합성 모델로 이미지 생성 ──────────────────
+  console.log(`[WT Premium] Step 2: ${engine} 이미지 합성 (${translationPairs.length}쌍 주입)`);
   let translatedDataUrl;
-
-  console.log(`[WT Premium] Step 2: ${engine} 이미지 합성 (번역 쌍 ${translationPairs.length}개 주입)`);
 
   if (engine === "openai") {
     translatedDataUrl = await translatePremiumOpenAI({
       base64DataUrl,
       apiKey: message.openaiApiKey || "",
-      model: message.premiumModel || "gpt-image-2",
+      model: message.imagePremOpenAISynthModel || "gpt-image-2",
       targetLang: message.targetLang || "ko",
       translationPairs,
     });
+  } else if (engine === "other") {
+    // Other 고급: 사설 이미지 생성 서버 (SD WebUI / ComfyUI / OpenAI Edit 호환)
+    // 현재는 OpenAI images/edits 규격으로 사설 서버에 위임
+    translatedDataUrl = await translatePremiumOpenAI({
+      base64DataUrl,
+      apiKey: message.imagePremOtherKey || "",
+      model: message.imagePremOtherSynthModel || "sd_inpainting_model",
+      targetLang: message.targetLang || "ko",
+      translationPairs,
+      // 사설 서버 URL 오버라이드 (imageTranslate.js가 지원하면 사용)
+      overrideUrl: message.imagePremOtherUrl || "",
+    });
   } else {
+    // Gemini (기본)
     translatedDataUrl = await translatePremiumGemini({
       base64DataUrl,
       apiKey: message.apiKey || "",
-      model: message.premiumModel || "gemini-3.1-flash-image",
+      model: message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
       targetLang: message.targetLang || "ko",
       translationPairs,
     });
