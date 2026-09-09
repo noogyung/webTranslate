@@ -34,25 +34,25 @@ export async function translateImageWithVision({
     ? `Image size: ${naturalWidth}x${naturalHeight}px.\n`
     : "";
 
-  // Gemini는 0~1000 정규화 좌표, GPT/Other는 픽셀 좌표를 반환하므로 프롬프트 분기
+  // Gemini는 [ymin,xmin,ymax,xmax] 0~1000 정규화, GPT/Other는 [xmin,ymin,xmax,ymax] 픽셀
   const isGemini = (mode === "gemini");
-  const coordNote = isGemini
-    ? `Coordinates: 0-1000 normalized scale (e.g. x=500 means 50% from left).\n`
-    : `Coordinates: actual pixel values.\n`;
+
+  const coordFormat = isGemini
+    ? `eraseBox: [ymin,xmin,ymax,xmax] 0-1000 normalized scale (e.g. 500=50% of image).`
+    : `eraseBox: [xmin,ymin,xmax,ymax] in actual pixel coordinates of this image.`;
 
   // 5개 핵심 필드 경량 프롬프트
   const prompt =
     `You are a high-precision OCR translator for image translation.\n\n` +
     dimNote +
     `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
-    `- eraseBox: [ymin,xmin,ymax,xmax] fully covers text for clean removal.\n` +
+    `- ${coordFormat}\n` +
     `- originalText: exact extracted text, line breaks as \\n.\n` +
     `- translatedText: ${langName} translation preserving line breaks.\n` +
     `- orientation: "horizontal" | "vertical" | "rotated".\n` +
     `- textColor: dominant text color as #RRGGBB.\n` +
-    coordNote +
     `Return valid JSON array only. No markdown.\n\n` +
-    `[{"eraseBox":[y,x,y,x],"originalText":"...","translatedText":"...(${langName})...","orientation":"horizontal","textColor":"#000000"}]`;
+    `[{"eraseBox":[a,b,c,d],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
 
   let rawContent = "";
 
@@ -180,16 +180,17 @@ function parseVisionJsonResponse(rawText) {
  */
 export function normalizeBox(rawBox, naturalWidth, naturalHeight, forcePixel = false) {
   if (!rawBox || !Array.isArray(rawBox) || rawBox.length !== 4) return null;
-  const [ymin, xmin, ymax, xmax] = rawBox;
 
   let px_x1, px_y1, px_x2, px_y2;
   let wasNorm = false;
 
   if (forcePixel) {
-    // GPT/Other Vision: 픽셀 좌표 그대로 사용
+    // GPT/Other Vision: [xmin, ymin, xmax, ymax] 픽셀 좌표 (표준 이미지 좌표계)
+    const [xmin, ymin, xmax, ymax] = rawBox;
     px_x1 = xmin; px_y1 = ymin; px_x2 = xmax; px_y2 = ymax;
   } else {
-    // Gemini: 0~1000 정규화 좌표 자동 감지
+    // Gemini: [ymin, xmin, ymax, xmax] 0~1000 정규화 좌표 자동 감지
+    const [ymin, xmin, ymax, xmax] = rawBox;
     const maxCoord = Math.max(ymin, xmin, ymax, xmax);
     const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
     wasNorm = isNorm;
