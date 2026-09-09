@@ -372,57 +372,240 @@
 
       <!-- 기본 모드 -->
       <div class="field-row">
-        <label class="field-label" for="imageTransMode">기본 모드</label>
-        <select id="imageTransMode" class="select-input">
+        <label class="field-label" for="imageMode">기본 모드</label>
+        <select id="imageMode" class="select-input">
           <option value="ask">매번 묻기</option>
           <option value="standard">항상 일반 (OCR → 오버레이)</option>
           <option value="premium">항상 고급 (AI 이미지 합성)</option>
         </select>
       </div>
 
-      <!-- 고급 모드 구분선 -->
-      <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08);">
-        <div style="font-size: 13px; color: #89b4fa; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
-          ⚡ 고급 모드 (AI 이미지 합성) 설정
+      <!-- ── 일반 번역 엔진 4종 ── -->
+      <div style="margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="font-size: 13px; color: #a6e3a1; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
+          🔍 일반 번역 (OCR → 텍스트 오버레이) 엔진
         </div>
 
-        <!-- 고급 모드 엔진 선택 -->
-        <div class="field-row">
-          <label class="field-label" for="imageTransPremiumEngine">이미지 합성 엔진</label>
-          <select id="imageTransPremiumEngine" class="select-input">
-            <option value="gemini">Gemini Image (유료 플랜 필요)</option>
-            <option value="openai">OpenAI GPT Image 2</option>
-          </select>
+        <!-- 일반 엔진 라디오 -->
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imageStdEngine" value="free" style="accent-color: #a6e3a1;" />
+            🆓 Free (내장 PP-OCR)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imageStdEngine" value="gemini" style="accent-color: #a6e3a1;" />
+            ✨ Gemini
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imageStdEngine" value="openai" style="accent-color: #a6e3a1;" />
+            🤖 GPT
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imageStdEngine" value="other" style="accent-color: #a6e3a1;" />
+            🔧 Other (사설 서버)
+          </label>
         </div>
 
-        <!-- Gemini 고급 모드 설정 -->
-        <div id="premiumGeminiSection" style="margin-top: 14px;">
+        <!-- 일반 Free 안내 -->
+        <div id="stdFreeSection">
+          <p class="field-hint">
+            내장 PP-OCRv6 Small (~18MB WASM)을 사용합니다. API 키 불필요, 50개 언어 지원, CJK 95%+ 정확도.<br>
+            번역은 상단 <em>번역 모드</em> 섹션의 메인 엔진을 그대로 사용합니다.
+          </p>
+        </div>
+
+        <!-- 일반 Gemini 모델 -->
+        <div id="stdGeminiSection" style="display: none;">
           <div class="field-row">
-            <label class="field-label" for="premiumGeminiModel">Gemini 이미지 모델</label>
-            <input type="text" id="premiumGeminiModel" class="text-input"
-              value="gemini-3.1-flash-image"
-              placeholder="gemini-3.1-flash-image"
+            <label class="field-label" for="imageStdGeminiModel">Gemini Vision 모델</label>
+            <input type="text" id="imageStdGeminiModel" class="text-input"
+              list="stdGeminiModelList"
+              placeholder="gemini-flash-lite-latest"
+              spellcheck="false" />
+            <datalist id="stdGeminiModelList">
+              <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (추천 - 1-Pass 최속)</option>
+              <option value="gemini-flash-latest">gemini-flash-latest</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            </datalist>
+          </div>
+          <p class="field-hint">Gemini API Key는 상단 <em>번역 모드 → Gemini AI</em> 섹션의 키를 그대로 사용합니다.</p>
+        </div>
+
+        <!-- 일반 GPT 모델 -->
+        <div id="stdOpenAISection" style="display: none;">
+          <div class="field-row">
+            <label class="field-label" for="imageStdOpenAIModel">GPT Vision 모델</label>
+            <input type="text" id="imageStdOpenAIModel" class="text-input"
+              list="stdOpenAIModelList"
+              placeholder="gpt-5.6-luna"
+              spellcheck="false" />
+            <datalist id="stdOpenAIModelList">
+              <option value="gpt-5.6-luna">gpt-5.6-luna (추천 - 2026 최신 경량)</option>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
+            </datalist>
+          </div>
+          <p class="field-hint">OpenAI API Key는 상단 <em>번역 모드 → ChatGPT API</em> 섹션의 키를 그대로 사용합니다.</p>
+        </div>
+
+        <!-- 일반 Other 세부 설정 -->
+        <div id="stdOtherSection" style="display: none;">
+          <div style="margin-bottom: 12px;">
+            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">서버 방식 선택:</div>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer; margin-bottom: 6px;">
+              <input type="radio" name="imageStdOtherType" value="ocr_server" style="accent-color: #f38ba8;" />
+              🖥️ 전용 OCR 서버 HTTP (PaddleOCR 등 — 텍스트+좌표 반환)
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer;">
+              <input type="radio" name="imageStdOtherType" value="vision_api" style="accent-color: #f38ba8;" />
+              🌐 OpenAI 규격 Vision API (Ollama / Qwen2.5-VL 등 — 1-Pass 번역)
+            </label>
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imageStdOtherUrl">서버 URL</label>
+            <input type="url" id="imageStdOtherUrl" class="text-input"
+              placeholder="http://localhost:8000/predict"
               spellcheck="false" />
           </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imageStdOtherKey">API Key (선택)</label>
+            <input type="password" id="imageStdOtherKey" class="text-input"
+              placeholder="없으면 비워두세요"
+              autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imageStdOtherModel">모델명</label>
+            <input type="text" id="imageStdOtherModel" class="text-input"
+              list="stdOtherModelList"
+              placeholder="qwen2.5-vl"
+              spellcheck="false" />
+            <datalist id="stdOtherModelList">
+              <option value="qwen2.5-vl">qwen2.5-vl (Vision API용 추천)</option>
+              <option value="llava">llava</option>
+              <option value="minicpm-v">minicpm-v</option>
+            </datalist>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 고급 번역 엔진 3종 ── -->
+      <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="font-size: 13px; color: #89b4fa; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
+          ⚡ 고급 번역 (AI 이미지 합성 — 512px 고속 완주) 엔진
+        </div>
+
+        <!-- 고급 엔진 라디오 -->
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imagePremEngine" value="gemini" style="accent-color: #89b4fa;" />
+            ✨ Gemini (추천)
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imagePremEngine" value="openai" style="accent-color: #89b4fa;" />
+            🤖 GPT
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+            <input type="radio" name="imagePremEngine" value="other" style="accent-color: #89b4fa;" />
+            🔧 Other (사설 생성 AI)
+          </label>
+        </div>
+
+        <!-- 고급 Gemini -->
+        <div id="premGeminiSection">
+          <div class="field-row">
+            <label class="field-label" for="imagePremGeminiOcrModel">Step 1 OCR 모델 (텍스트 추출)</label>
+            <input type="text" id="imagePremGeminiOcrModel" class="text-input"
+              list="premGeminiOcrModelList"
+              placeholder="gemini-flash-lite-latest"
+              spellcheck="false" />
+            <datalist id="premGeminiOcrModelList">
+              <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (추천 - 초고속)</option>
+              <option value="gemini-flash-latest">gemini-flash-latest</option>
+            </datalist>
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imagePremGeminiSynthModel">Step 2 합성 모델 (이미지 생성)</label>
+            <input type="text" id="imagePremGeminiSynthModel" class="text-input"
+              list="premGeminiSynthModelList"
+              placeholder="gemini-3.1-flash-image"
+              spellcheck="false" />
+            <datalist id="premGeminiSynthModelList">
+              <option value="gemini-3.1-flash-image">gemini-3.1-flash-image (추천 - 4~6초 완주)</option>
+              <option value="gemini-3-pro-image">gemini-3-pro-image (고품질)</option>
+            </datalist>
+          </div>
           <p class="field-hint" style="margin-top: 6px;">
-            💡 <strong>Gemini API Key</strong>는 상단 <em>번역 모드 → Gemini AI</em> 섹션의 키를 그대로 사용합니다.<br>
-            모델: <code>gemini-3.1-flash-image</code> (~$0.02/장) · <code>gemini-3-pro-image</code> (~$0.13/장)<br>
+            💡 Gemini API Key는 상단 <em>번역 모드 → Gemini AI</em> 섹션의 키를 그대로 사용합니다.<br>
             ⚠️ 이미지 생성 API는 <strong>무료 티어 미지원</strong> — Google AI Studio에서 결제 활성화 필요
           </p>
         </div>
 
-        <!-- OpenAI 고급 모드 설정 -->
-        <div id="premiumOpenAISection" style="margin-top: 14px; display: none;">
+        <!-- 고급 GPT -->
+        <div id="premOpenAISection" style="display: none;">
           <div class="field-row">
-            <label class="field-label" for="premiumOpenAIModel">OpenAI 이미지 모델</label>
-            <input type="text" id="premiumOpenAIModel" class="text-input"
-              value="gpt-image-2"
+            <label class="field-label" for="imagePremOpenAIOcrModel">Step 1 OCR 모델 (텍스트 추출)</label>
+            <input type="text" id="imagePremOpenAIOcrModel" class="text-input"
+              list="premOpenAIOcrModelList"
+              placeholder="gpt-5.6-luna"
+              spellcheck="false" />
+            <datalist id="premOpenAIOcrModelList">
+              <option value="gpt-5.6-luna">gpt-5.6-luna (추천 - 2026 최신 경량)</option>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+            </datalist>
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imagePremOpenAISynthModel">Step 2 합성 모델 (이미지 생성)</label>
+            <input type="text" id="imagePremOpenAISynthModel" class="text-input"
+              list="premOpenAISynthModelList"
               placeholder="gpt-image-2"
               spellcheck="false" />
+            <datalist id="premOpenAISynthModelList">
+              <option value="gpt-image-2">gpt-image-2 (OpenAI 공식 이미지 생성)</option>
+            </datalist>
           </div>
           <p class="field-hint" style="margin-top: 6px;">
-            💡 <strong>OpenAI API Key</strong>는 상단 <em>번역 모드 → ChatGPT API</em> 섹션의 키를 그대로 사용합니다.<br>
-            모델: <code>gpt-image-2</code> (출력 토큰 기반 과금, ~$0.04/장)
+            💡 OpenAI API Key는 상단 <em>번역 모드 → ChatGPT API</em> 섹션의 키를 그대로 사용합니다.
+          </p>
+        </div>
+
+        <!-- 고급 Other -->
+        <div id="premOtherSection" style="display: none;">
+          <div class="field-row">
+            <label class="field-label" for="imagePremOtherUrl">생성 AI 서버 URL</label>
+            <input type="url" id="imagePremOtherUrl" class="text-input"
+              placeholder="http://localhost:7860"
+              spellcheck="false" />
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imagePremOtherKey">API Key (선택)</label>
+            <input type="password" id="imagePremOtherKey" class="text-input"
+              placeholder="없으면 비워두세요"
+              autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imagePremOtherOcrModel">Step 1 OCR 모델명</label>
+            <input type="text" id="imagePremOtherOcrModel" class="text-input"
+              list="premOtherOcrModelList"
+              placeholder="qwen2.5-vl"
+              spellcheck="false" />
+            <datalist id="premOtherOcrModelList">
+              <option value="qwen2.5-vl">qwen2.5-vl</option>
+              <option value="llava">llava</option>
+            </datalist>
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imagePremOtherSynthModel">Step 2 합성 모델명</label>
+            <input type="text" id="imagePremOtherSynthModel" class="text-input"
+              list="premOtherSynthModelList"
+              placeholder="sd_inpainting_model"
+              spellcheck="false" />
+            <datalist id="premOtherSynthModelList">
+              <option value="sd_inpainting_model">sd_inpainting_model (SD WebUI 기본)</option>
+              <option value="comfyui_inpainting">comfyui_inpainting</option>
+            </datalist>
+          </div>
+          <p class="field-hint" style="margin-top: 6px;">
+            ComfyUI, SD WebUI, vLLM 등 OpenAI Edit 규격 호환 사설 이미지 생성 서버를 연결합니다.
           </p>
         </div>
       </div>
@@ -440,6 +623,7 @@
         단축키는 <code>chrome://extensions/shortcuts</code>에서 변경 가능합니다.
       </p>
     </section>
+
 
     <!-- v2.0 커스텀 엔진 설정 -->
     <section class="card" id="customEngineSection" style="display: none;">

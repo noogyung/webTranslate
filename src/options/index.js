@@ -58,16 +58,37 @@ const resetStyleBtn = document.getElementById("resetStyleBtn");
 const clearCacheBtn = document.getElementById("clearCacheBtn");
 const resetShortcutBtn = document.getElementById("resetShortcutBtn");
 
-// v2.0 이미지 번역 설정
-const imageTransModeSelect = document.getElementById("imageTransMode");
-const imageTransPremiumEngineSelect = document.getElementById("imageTransPremiumEngine");
-const premiumGeminiModelInput = document.getElementById("premiumGeminiModel");
-const premiumOpenAIModelInput = document.getElementById("premiumOpenAIModel");
-const premiumGeminiSection = document.getElementById("premiumGeminiSection");
-const premiumOpenAISection = document.getElementById("premiumOpenAISection");
+// v2.0 이미지 번역 공통
+const imageModeSelect = document.getElementById("imageMode");
 const imageCostNotifyInput = document.getElementById("imageCostNotify");
 
-// v2.0 커스텀 엔진
+// v2.0 일반 번역 엔진
+const imageStdEngineRadios = document.querySelectorAll('input[name="imageStdEngine"]');
+const stdFreeSection = document.getElementById("stdFreeSection");
+const stdGeminiSection = document.getElementById("stdGeminiSection");
+const stdOpenAISection = document.getElementById("stdOpenAISection");
+const stdOtherSection = document.getElementById("stdOtherSection");
+const imageStdGeminiModelInput = document.getElementById("imageStdGeminiModel");
+const imageStdOpenAIModelInput = document.getElementById("imageStdOpenAIModel");
+const imageStdOtherTypeRadios = document.querySelectorAll('input[name="imageStdOtherType"]');
+const imageStdOtherUrlInput = document.getElementById("imageStdOtherUrl");
+const imageStdOtherKeyInput = document.getElementById("imageStdOtherKey");
+const imageStdOtherModelInput = document.getElementById("imageStdOtherModel");
+
+// v2.0 고급 번역 엔진
+const imagePremEngineRadios = document.querySelectorAll('input[name="imagePremEngine"]');
+const premGeminiSection = document.getElementById("premGeminiSection");
+const premOpenAISection = document.getElementById("premOpenAISection");
+const premOtherSection = document.getElementById("premOtherSection");
+const imagePremGeminiOcrModelInput = document.getElementById("imagePremGeminiOcrModel");
+const imagePremGeminiSynthModelInput = document.getElementById("imagePremGeminiSynthModel");
+const imagePremOpenAIOcrModelInput = document.getElementById("imagePremOpenAIOcrModel");
+const imagePremOpenAISynthModelInput = document.getElementById("imagePremOpenAISynthModel");
+const imagePremOtherUrlInput = document.getElementById("imagePremOtherUrl");
+const imagePremOtherKeyInput = document.getElementById("imagePremOtherKey");
+const imagePremOtherOcrModelInput = document.getElementById("imagePremOtherOcrModel");
+const imagePremOtherSynthModelInput = document.getElementById("imagePremOtherSynthModel");
+
 const customApiUrlInput = document.getElementById("customApiUrl");
 const customApiKeyInput = document.getElementById("customApiKey");
 const customModelInput = document.getElementById("customModel");
@@ -124,23 +145,37 @@ async function initialize() {
   // 사용자 사전
   setCustomDict(settings.customDict || []);
 
-  // v2.0 이미지 번역 설정
-  if (imageTransModeSelect) imageTransModeSelect.value = settings.imageTransMode || "ask";
+  // v2.0 이미지 번역 공통
+  if (imageModeSelect) imageModeSelect.value = settings.imageMode || "ask";
   if (imageCostNotifyInput) imageCostNotifyInput.checked = settings.imageCostNotify !== false;
 
-  const savedEngine = settings.imageTransPremiumEngine || "gemini";
-  if (imageTransPremiumEngineSelect) imageTransPremiumEngineSelect.value = savedEngine;
+  // 일반 번역 엔진 라디오
+  const savedStdEngine = settings.imageStdEngine || "free";
+  const stdRadio = document.querySelector(`input[name="imageStdEngine"][value="${savedStdEngine}"]`);
+  if (stdRadio) stdRadio.checked = true;
+  if (imageStdGeminiModelInput) imageStdGeminiModelInput.value = settings.imageStdGeminiModel || "gemini-flash-lite-latest";
+  if (imageStdOpenAIModelInput) imageStdOpenAIModelInput.value = settings.imageStdOpenAIModel || "gpt-5.6-luna";
+  const savedStdOtherType = settings.imageStdOtherType || "ocr_server";
+  const stdOtherTypeRadio = document.querySelector(`input[name="imageStdOtherType"][value="${savedStdOtherType}"]`);
+  if (stdOtherTypeRadio) stdOtherTypeRadio.checked = true;
+  if (imageStdOtherUrlInput) imageStdOtherUrlInput.value = settings.imageStdOtherUrl || "http://localhost:8000/predict";
+  if (imageStdOtherKeyInput) imageStdOtherKeyInput.value = settings.imageStdOtherKey || "";
+  if (imageStdOtherModelInput) imageStdOtherModelInput.value = settings.imageStdOtherModel || "qwen2.5-vl";
+  updateStdEngineSection(savedStdEngine);
 
-  // 엔진별 모델 기본값 (저장된 값 우선, 없으면 엔진별 기본값)
-  if (premiumGeminiModelInput) {
-    premiumGeminiModelInput.value = settings.premiumGeminiModel || "gemini-3.1-flash-image";
-  }
-  if (premiumOpenAIModelInput) {
-    premiumOpenAIModelInput.value = settings.premiumOpenAIModel || "gpt-image-2";
-  }
-
-  // 엔진 섹션 토글
-  updatePremiumEngineSection(savedEngine);
+  // 고급 번역 엔진 라디오
+  const savedPremEngine = settings.imagePremEngine || "gemini";
+  const premRadio = document.querySelector(`input[name="imagePremEngine"][value="${savedPremEngine}"]`);
+  if (premRadio) premRadio.checked = true;
+  if (imagePremGeminiOcrModelInput) imagePremGeminiOcrModelInput.value = settings.imagePremGeminiOcrModel || "gemini-flash-lite-latest";
+  if (imagePremGeminiSynthModelInput) imagePremGeminiSynthModelInput.value = settings.imagePremGeminiSynthModel || "gemini-3.1-flash-image";
+  if (imagePremOpenAIOcrModelInput) imagePremOpenAIOcrModelInput.value = settings.imagePremOpenAIOcrModel || "gpt-5.6-luna";
+  if (imagePremOpenAISynthModelInput) imagePremOpenAISynthModelInput.value = settings.imagePremOpenAISynthModel || "gpt-image-2";
+  if (imagePremOtherUrlInput) imagePremOtherUrlInput.value = settings.imagePremOtherUrl || "http://localhost:7860";
+  if (imagePremOtherKeyInput) imagePremOtherKeyInput.value = settings.imagePremOtherKey || "";
+  if (imagePremOtherOcrModelInput) imagePremOtherOcrModelInput.value = settings.imagePremOtherOcrModel || "qwen2.5-vl";
+  if (imagePremOtherSynthModelInput) imagePremOtherSynthModelInput.value = settings.imagePremOtherSynthModel || "sd_inpainting_model";
+  updatePremEngineSection(savedPremEngine);
 
   // v2.0 커스텀 엔진 설정
   if (customApiUrlInput) customApiUrlInput.value = settings.customApiUrl || "";
@@ -160,17 +195,28 @@ async function initialize() {
 
 document.addEventListener("DOMContentLoaded", initialize);
 
-/* ── 고급 모드 엔진 섹션 토글 ───────────────────────────────── */
-function updatePremiumEngineSection(engine) {
-  if (premiumGeminiSection) premiumGeminiSection.style.display = engine === "gemini" ? "" : "none";
-  if (premiumOpenAISection) premiumOpenAISection.style.display = engine === "openai" ? "" : "none";
+/* ── 일반 번역 엔진 섹션 토글 ──────────────────────────────── */
+function updateStdEngineSection(engine) {
+  if (stdFreeSection)   stdFreeSection.style.display   = engine === "free"   ? "" : "none";
+  if (stdGeminiSection) stdGeminiSection.style.display = engine === "gemini" ? "" : "none";
+  if (stdOpenAISection) stdOpenAISection.style.display = engine === "openai" ? "" : "none";
+  if (stdOtherSection)  stdOtherSection.style.display  = engine === "other"  ? "" : "none";
 }
 
-if (imageTransPremiumEngineSelect) {
-  imageTransPremiumEngineSelect.addEventListener("change", () => {
-    updatePremiumEngineSection(imageTransPremiumEngineSelect.value);
-  });
+imageStdEngineRadios.forEach((radio) => {
+  radio.addEventListener("change", () => updateStdEngineSection(radio.value));
+});
+
+/* ── 고급 번역 엔진 섹션 토글 ──────────────────────────────── */
+function updatePremEngineSection(engine) {
+  if (premGeminiSection) premGeminiSection.style.display = engine === "gemini" ? "" : "none";
+  if (premOpenAISection) premOpenAISection.style.display = engine === "openai" ? "" : "none";
+  if (premOtherSection)  premOtherSection.style.display  = engine === "other"  ? "" : "none";
 }
+
+imagePremEngineRadios.forEach((radio) => {
+  radio.addEventListener("change", () => updatePremEngineSection(radio.value));
+});
 
 /* ── 이벤트 리스너 등록 ────────────────────────────────────── */
 
@@ -393,9 +439,9 @@ if (saveBtn) {
       geminiApiKey: geminiApiKeyInput.value.trim(),
       geminiModel: geminiModelInput.value.trim() || "gemini-flash-lite-latest",
       openaiApiKey: openaiApiKeyInput ? openaiApiKeyInput.value.trim() : "",
-      openaiModel: openaiModelInput ? openaiModelInput.value.trim() : "gpt-4o-mini",
+      openaiModel: openaiModelInput ? openaiModelInput.value.trim() : "gpt-5.6-luna",
       claudeApiKey: claudeApiKeyInput ? claudeApiKeyInput.value.trim() : "",
-      claudeModel: claudeModelSelect ? claudeModelSelect.value : "claude-3-5-haiku-20241022",
+      claudeModel: claudeModelSelect ? claudeModelSelect.value : "claude-3-5-haiku-latest",
       ollamaUrl: ollamaUrlInput ? ollamaUrlInput.value.trim() : "http://localhost:11434",
       ollamaModel: ollamaModelInput ? ollamaModelInput.value.trim() : "qwen2.5",
       ollamaCustomPrompt: ollamaCustomPromptInput ? ollamaCustomPromptInput.value.trim() : "",
@@ -413,16 +459,27 @@ if (saveBtn) {
       transFontSize: transFontSizeSelect ? transFontSizeSelect.value : "100%",
       transItalic: transItalicInput ? transItalicInput.checked : false,
       transBgAlpha: transBgAlphaInput ? parseFloat(transBgAlphaInput.value) : 0.12,
-      // v2.0 이미지 번역
-      imageTransMode: imageTransModeSelect ? imageTransModeSelect.value : "ask",
-      imageTransPremiumEngine: imageTransPremiumEngineSelect ? imageTransPremiumEngineSelect.value : "gemini",
-      premiumGeminiModel: premiumGeminiModelInput ? premiumGeminiModelInput.value.trim() : "gemini-3.1-flash-image",
-      premiumOpenAIModel: premiumOpenAIModelInput ? premiumOpenAIModelInput.value.trim() : "gpt-image-2",
-      // 현재 선택 엔진 기준으로 imageTransPremiumModel 결정 (background에서 사용)
-      imageTransPremiumModel: imageTransPremiumEngineSelect?.value === "openai"
-        ? (premiumOpenAIModelInput?.value.trim() || "gpt-image-2")
-        : (premiumGeminiModelInput?.value.trim() || "gemini-3.1-flash-image"),
+      // v2.0 이미지 번역 공통
+      imageMode: imageModeSelect ? imageModeSelect.value : "ask",
       imageCostNotify: imageCostNotifyInput ? imageCostNotifyInput.checked : true,
+      // v2.0 일반 번역 엔진
+      imageStdEngine: document.querySelector('input[name="imageStdEngine"]:checked')?.value || "free",
+      imageStdGeminiModel: imageStdGeminiModelInput ? imageStdGeminiModelInput.value.trim() : "gemini-flash-lite-latest",
+      imageStdOpenAIModel: imageStdOpenAIModelInput ? imageStdOpenAIModelInput.value.trim() : "gpt-5.6-luna",
+      imageStdOtherType: document.querySelector('input[name="imageStdOtherType"]:checked')?.value || "ocr_server",
+      imageStdOtherUrl: imageStdOtherUrlInput ? imageStdOtherUrlInput.value.trim() : "http://localhost:8000/predict",
+      imageStdOtherKey: imageStdOtherKeyInput ? imageStdOtherKeyInput.value.trim() : "",
+      imageStdOtherModel: imageStdOtherModelInput ? imageStdOtherModelInput.value.trim() : "qwen2.5-vl",
+      // v2.0 고급 번역 엔진
+      imagePremEngine: document.querySelector('input[name="imagePremEngine"]:checked')?.value || "gemini",
+      imagePremGeminiOcrModel: imagePremGeminiOcrModelInput ? imagePremGeminiOcrModelInput.value.trim() : "gemini-flash-lite-latest",
+      imagePremGeminiSynthModel: imagePremGeminiSynthModelInput ? imagePremGeminiSynthModelInput.value.trim() : "gemini-3.1-flash-image",
+      imagePremOpenAIOcrModel: imagePremOpenAIOcrModelInput ? imagePremOpenAIOcrModelInput.value.trim() : "gpt-5.6-luna",
+      imagePremOpenAISynthModel: imagePremOpenAISynthModelInput ? imagePremOpenAISynthModelInput.value.trim() : "gpt-image-2",
+      imagePremOtherUrl: imagePremOtherUrlInput ? imagePremOtherUrlInput.value.trim() : "http://localhost:7860",
+      imagePremOtherKey: imagePremOtherKeyInput ? imagePremOtherKeyInput.value.trim() : "",
+      imagePremOtherOcrModel: imagePremOtherOcrModelInput ? imagePremOtherOcrModelInput.value.trim() : "qwen2.5-vl",
+      imagePremOtherSynthModel: imagePremOtherSynthModelInput ? imagePremOtherSynthModelInput.value.trim() : "sd_inpainting_model",
       // v2.0 커스텀 엔진
       customApiUrl: customApiUrlInput ? customApiUrlInput.value.trim() : "",
       customApiKey: customApiKeyInput ? customApiKeyInput.value.trim() : "",
