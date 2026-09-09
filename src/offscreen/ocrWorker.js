@@ -7,13 +7,13 @@
  */
 
 /* global ort */
-// ort.wasm.min.js가 <script> 태그로 이미 로드됨
 
 // ── 상태 ──
 let detSession = null;
 let recSession = null;
 let currentRecLang = null;
 let charDict = null;
+let ortInitialized = false;
 
 // 언어 → 모델/사전 매핑
 const REC_MODELS = {
@@ -25,28 +25,37 @@ const REC_MODELS = {
 
 // ── ONNX Runtime 초기화 ──
 function initOrt() {
-  ort.env.wasm.wasmPaths = chrome.runtime.getURL("src/models/");
-  ort.env.wasm.numThreads = 1; // MV3 안정성
+  if (ortInitialized) return;
+  if (typeof ort === "undefined") {
+    throw new Error("ort 전역 객체를 찾을 수 없습니다. ort.min.js가 로드되지 않았습니다.");
+  }
+  const wasmDir = chrome.runtime.getURL("src/models/");
+  console.log("[OCR Worker] WASM 경로:", wasmDir);
+  ort.env.wasm.wasmPaths = wasmDir;
+  ort.env.wasm.numThreads = 1;
   ort.env.wasm.simd = true;
+  ortInitialized = true;
 }
 
 async function ensureDetSession() {
   if (detSession) return;
   initOrt();
   const modelUrl = chrome.runtime.getURL("src/models/ch_PP-OCRv4_det_infer.onnx");
+  console.log("[OCR Worker] Det 모델 로드 시작:", modelUrl);
   const response = await fetch(modelUrl);
+  if (!response.ok) throw new Error(`Det 모델 다운로드 실패: HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
+  console.log("[OCR Worker] Det 모델 크기:", (buffer.byteLength / 1024 / 1024).toFixed(1), "MB");
   detSession = await ort.InferenceSession.create(buffer, {
     executionProviders: ["wasm"],
   });
-  console.log("[OCR Worker] Det 모델 로드 완료");
+  console.log("[OCR Worker] Det 모델 로드 완료 — inputs:", detSession.inputNames, "outputs:", detSession.outputNames);
 }
 
 async function ensureRecSession(lang) {
-  const targetLang = REC_MODELS[lang] ? lang : "ja"; // 기본값: 일본어
+  const targetLang = REC_MODELS[lang] ? lang : "ja";
   if (recSession && currentRecLang === targetLang) return;
 
-  // 기존 세션 해제 (메모리 절약)
   if (recSession) {
     recSession.release();
     recSession = null;
@@ -56,24 +65,25 @@ async function ensureRecSession(lang) {
 
   initOrt();
   const config = REC_MODELS[targetLang];
-
-  // 모델 로드
   const modelUrl = chrome.runtime.getURL(`src/models/${config.model}`);
+  console.log("[OCR Worker] Rec 모델 로드 시작:", modelUrl);
   const response = await fetch(modelUrl);
+  if (!response.ok) throw new Error(`Rec 모델 다운로드 실패: HTTP ${response.status} (${config.model})`);
   const buffer = await response.arrayBuffer();
+  console.log("[OCR Worker] Rec 모델 크기:", (buffer.byteLength / 1024 / 1024).toFixed(1), "MB");
   recSession = await ort.InferenceSession.create(buffer, {
     executionProviders: ["wasm"],
   });
 
-  // 사전 로드
   const dictUrl = chrome.runtime.getURL(`src/models/${config.dict}`);
   const dictRes = await fetch(dictUrl);
+  if (!dictRes.ok) throw new Error(`사전 파일 다운로드 실패: HTTP ${dictRes.status} (${config.dict})`);
   const dictText = await dictRes.text();
   charDict = dictText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  charDict.push(" "); // PaddleOCR 표준: 마지막에 공백
+  charDict.push(" ");
 
   currentRecLang = targetLang;
-  console.log(`[OCR Worker] Rec 모델 로드 완료: ${targetLang} (${config.model}, 사전 ${charDict.length}자)`);
+  console.log(`[OCR Worker] Rec 모델 로드 완료: ${targetLang} (${config.model}, 사전 ${charDict.length}자) — inputs:`, recSession.inputNames, "outputs:", recSession.outputNames);
 }
 
 // ── 이미지 전처리 ──
@@ -179,7 +189,7 @@ function dbnetPostProcess(probMap, mapW, mapH, origW, origH) {
     boxes.push({ x, y, width: x2 - x, height: y2 - y, score });
   }
 
-  boxes.sort((a, b) => a.y - b.y || a.x - b.x); // 위→아래, 좌→우 정렬
+  boxes.sort((a, b) => a.y - b.y || a.x - b.x);
   return boxes;
 }
 
@@ -194,7 +204,7 @@ function findConnectedComponents(bitmap, w, h) {
       if (bitmap[idx] === 0 || labels[idx] !== 0) continue;
 
       labelId++;
-      const stack = [[x, y]]; // DFS (BFS queue → 메모리 문제 방지)
+      const stack = [[x, y]];
       const pixels = [];
       labels[idx] = labelId;
 
@@ -216,7 +226,7 @@ function findConnectedComponents(bitmap, w, h) {
         }
       }
 
-      if (pixels.length >= 9) { // 최소 3×3
+      if (pixels.length >= 9) {
         components.push(pixels);
       }
     }
@@ -259,31 +269,32 @@ function ctcDecode(logits, timeSteps, numClasses) {
 async function runOcr(base64DataUrl, lang = "ja") {
   const t0 = performance.now();
 
-  // 1) 모델 로드
   await ensureDetSession();
   await ensureRecSession(lang);
   const tLoad = performance.now();
+  console.log(`[OCR Worker] 모델 로드: ${Math.round(tLoad - t0)}ms`);
 
-  // 2) 이미지 로드
   const img = await loadImageBitmap(base64DataUrl);
+  console.log(`[OCR Worker] 이미지: ${img.width}×${img.height}`);
 
-  // 3) Detection
+  // Detection
   const det = preprocessDet(img);
+  console.log(`[OCR Worker] Det 전처리: ${det.width}×${det.height} (원본 ${det.origW}×${det.origH})`);
   const detInput = new ort.Tensor("float32", det.tensor, [1, 3, det.height, det.width]);
   const detInputName = detSession.inputNames[0];
   const detResult = await detSession.run({ [detInputName]: detInput });
   const detOutputName = detSession.outputNames[0];
   const probMap = detResult[detOutputName].data;
   const tDet = performance.now();
+  console.log(`[OCR Worker] Det 추론: ${Math.round(tDet - tLoad)}ms`);
 
-  // 4) DBNet 후처리 → BBox 배열
+  // DBNet 후처리
   const boxes = dbnetPostProcess(probMap, det.width, det.height, det.origW, det.origH);
   const tPost = performance.now();
+  console.log(`[OCR Worker] 후처리: ${boxes.length}개 박스, ${Math.round(tPost - tDet)}ms`);
 
-  // 5) Recognition (각 BBox에서 텍스트 추출)
+  // Recognition
   const results = [];
-  const numClasses = charDict.length + 1; // +1 for blank
-
   for (const box of boxes) {
     try {
       const rec = preprocessRec(img, box);
@@ -292,7 +303,7 @@ async function runOcr(base64DataUrl, lang = "ja") {
       const recResult = await recSession.run({ [recInputName]: recInput });
       const recOutputName = recSession.outputNames[0];
       const logits = recResult[recOutputName].data;
-      const dims = recResult[recOutputName].dims; // [1, T, C]
+      const dims = recResult[recOutputName].dims;
       const timeSteps = dims[1];
       const classes = dims[2];
 
@@ -310,7 +321,7 @@ async function runOcr(base64DataUrl, lang = "ja") {
   }
 
   const tRec = performance.now();
-  console.log(`[OCR Worker] 완료 — ${results.length}블록 | 로드=${Math.round(tLoad - t0)}ms Det=${Math.round(tDet - tLoad)}ms 후처리=${Math.round(tPost - tDet)}ms Rec=${Math.round(tRec - tPost)}ms`);
+  console.log(`[OCR Worker] 완료 — ${results.length}블록 | 로드=${Math.round(tLoad - t0)}ms Det=${Math.round(tDet - tLoad)}ms 후처리=${Math.round(tPost - tDet)}ms Rec=${Math.round(tRec - tPost)}ms 합계=${Math.round(tRec - t0)}ms`);
 
   return results;
 }
@@ -323,11 +334,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   runOcr(message.imageDataUrl, message.lang || "ja")
     .then(results => sendResponse({ success: true, blocks: results }))
     .catch(err => {
-      console.error("[OCR Worker] 오류:", err);
-      sendResponse({ success: false, error: err.message });
+      console.error("[OCR Worker] 오류:", err?.message || err, err?.stack || "");
+      sendResponse({ success: false, error: String(err?.message || err) });
     });
 
-  return true; // 비동기 응답
+  return true;
 });
 
-console.log("[OCR Worker] Offscreen OCR Worker 초기화 완료");
+console.log("[OCR Worker] Offscreen OCR Worker 초기화 완료 — ort 존재:", typeof ort !== "undefined");
