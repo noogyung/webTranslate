@@ -59,8 +59,9 @@ async function ensureRec(lang) {
   recSession = await loadModel("Rec", modelBase() + cfg.model);
   var dictRes = await fetch(modelBase() + cfg.dict);
   var dictText = await dictRes.text();
-  charDict = dictText.split("\n").map(function (l) { return l.trim(); }).filter(function (l) { return l.length > 0; });
-  charDict.push(" ");
+  // 공백 문자도 유효 사전 항목이므로 trim/filter 금지 — trailing empty line만 제거
+  charDict = dictText.split("\n").map(function (l) { return l.replace(/\r$/, ""); });
+  while (charDict.length > 0 && charDict[charDict.length - 1] === "") charDict.pop();
   currentRecLang = lang;
   log("[Rec] 사전: " + charDict.length + "자");
 }

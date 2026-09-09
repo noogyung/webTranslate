@@ -79,8 +79,9 @@ async function ensureRecSession(lang) {
   const dictRes = await fetch(dictUrl);
   if (!dictRes.ok) throw new Error(`사전 파일 다운로드 실패: HTTP ${dictRes.status} (${config.dict})`);
   const dictText = await dictRes.text();
-  charDict = dictText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-  charDict.push(" ");
+  // 공백 문자도 유효 사전 항목 — trim/filter 금지, trailing empty line만 제거
+  charDict = dictText.split("\n").map(l => l.replace(/\r$/, ""));
+  while (charDict.length > 0 && charDict[charDict.length - 1] === "") charDict.pop();
 
   currentRecLang = targetLang;
   console.log(`[OCR Worker] Rec 모델 로드 완료: ${targetLang} (${config.model}, 사전 ${charDict.length}자) — inputs:`, recSession.inputNames, "outputs:", recSession.outputNames);
