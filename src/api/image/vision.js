@@ -3,6 +3,7 @@
  * Vision AI 1-Pass OCR+번역 모듈 (Gemini / OpenAI / Other Vision API)
  * - 하드코딩 모델명 완전 제거: 호출측에서 모델명을 반드시 전달
  * - 5개 핵심 필드 경량 프롬프트: eraseBox, originalText, translatedText, orientation, textColor
+ * - Gemini: 0~1000 정규화 좌표 반환 / OpenAI(GPT): 픽셀 좌표 반환 → 분기 처리
  * - Other [Vision API 방식] (Ollama/Qwen 등 OpenAI 규격 호환 서버) 라우팅 추가
  */
 
@@ -33,7 +34,13 @@ export async function translateImageWithVision({
     ? `Image size: ${naturalWidth}x${naturalHeight}px.\n`
     : "";
 
-  // 5개 핵심 필드 경량 프롬프트 (토큰 60% 절감, 응답 2초대 목표)
+  // Gemini는 0~1000 정규화 좌표, GPT/Other는 픽셀 좌표를 반환하므로 프롬프트 분기
+  const isGemini = (mode === "gemini");
+  const coordNote = isGemini
+    ? `Coordinates: 0-1000 normalized scale (e.g. x=500 means 50% from left).\n`
+    : `Coordinates: actual pixel values.\n`;
+
+  // 5개 핵심 필드 경량 프롬프트
   const prompt =
     `You are a high-precision OCR translator for image translation.\n\n` +
     dimNote +
@@ -43,7 +50,7 @@ export async function translateImageWithVision({
     `- translatedText: ${langName} translation preserving line breaks.\n` +
     `- orientation: "horizontal" | "vertical" | "rotated".\n` +
     `- textColor: dominant text color as #RRGGBB.\n` +
-    `Coordinates: 0-1000 normalized if image >1000px, else pixel coords.\n` +
+    coordNote +
     `Return valid JSON array only. No markdown.\n\n` +
     `[{"eraseBox":[y,x,y,x],"originalText":"...","translatedText":"...(${langName})...","orientation":"horizontal","textColor":"#000000"}]`;
 
@@ -121,15 +128,18 @@ export async function translateImageWithVision({
     return [];
   }
 
+  // OpenAI/Other Vision: 픽셀 좌표 → forcePixel=true (정규화 판정 없이 픽셀 직접 사용)
+  const forcePixel = (mode === "openai" || mode === "other_vision");
+
   const finalBlocks = ocrBlocks.map((block) => ({
     ...block,
     translatedText: block.translatedText?.trim() || block.originalText || "",
-    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight),
-    glyphBox: block.glyphBox ? normalizeBox(block.glyphBox, naturalWidth, naturalHeight) : null,
-    containerBox: block.containerBox ? normalizeBox(block.containerBox, naturalWidth, naturalHeight) : null,
+    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight, forcePixel),
+    glyphBox: block.glyphBox ? normalizeBox(block.glyphBox, naturalWidth, naturalHeight, forcePixel) : null,
+    containerBox: block.containerBox ? normalizeBox(block.containerBox, naturalWidth, naturalHeight, forcePixel) : null,
   })).filter(b => b.eraseBox !== null);
 
-  console.log(`[WT Vision] 1-Pass 완료 — ${finalBlocks.length}블록`);
+  console.log(`[WT Vision] 1-Pass 완료 — ${finalBlocks.length}블록 (mode=${mode}, forcePixel=${forcePixel})`);
   return finalBlocks;
 }
 
@@ -166,18 +176,28 @@ function parseVisionJsonResponse(rawText) {
 
 /**
  * [ymin, xmin, ymax, xmax] → { x, y, width, height }
- * 0~1000 정규화 좌표 자동 감지 후 역정규화.
+ * @param {boolean} forcePixel - true면 정규화 판정 없이 픽셀 직접 사용 (GPT Vision용)
  */
-export function normalizeBox(rawBox, naturalWidth, naturalHeight) {
+export function normalizeBox(rawBox, naturalWidth, naturalHeight, forcePixel = false) {
   if (!rawBox || !Array.isArray(rawBox) || rawBox.length !== 4) return null;
   const [ymin, xmin, ymax, xmax] = rawBox;
-  const maxCoord = Math.max(ymin, xmin, ymax, xmax);
-  const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
 
-  const px_x1 = isNorm ? (xmin / 1000) * naturalWidth : xmin;
-  const px_y1 = isNorm ? (ymin / 1000) * naturalHeight : ymin;
-  const px_x2 = isNorm ? (xmax / 1000) * naturalWidth : xmax;
-  const px_y2 = isNorm ? (ymax / 1000) * naturalHeight : ymax;
+  let px_x1, px_y1, px_x2, px_y2;
+  let wasNorm = false;
+
+  if (forcePixel) {
+    // GPT/Other Vision: 픽셀 좌표 그대로 사용
+    px_x1 = xmin; px_y1 = ymin; px_x2 = xmax; px_y2 = ymax;
+  } else {
+    // Gemini: 0~1000 정규화 좌표 자동 감지
+    const maxCoord = Math.max(ymin, xmin, ymax, xmax);
+    const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
+    wasNorm = isNorm;
+    px_x1 = isNorm ? (xmin / 1000) * naturalWidth : xmin;
+    px_y1 = isNorm ? (ymin / 1000) * naturalHeight : ymin;
+    px_x2 = isNorm ? (xmax / 1000) * naturalWidth : xmax;
+    px_y2 = isNorm ? (ymax / 1000) * naturalHeight : ymax;
+  }
 
   const PAD = 2;
   const x = Math.max(0, Math.round(px_x1) - PAD);
@@ -186,5 +206,5 @@ export function normalizeBox(rawBox, naturalWidth, naturalHeight) {
   const y2 = Math.min(naturalHeight || Infinity, Math.round(px_y2) + PAD);
   const w = x2 - x, h = y2 - y;
   if (w <= 0 || h <= 0) return null;
-  return { x, y, width: w, height: h, _wasNormalized: isNorm };
+  return { x, y, width: w, height: h, _wasNormalized: wasNorm };
 }

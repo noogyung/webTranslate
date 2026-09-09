@@ -52,54 +52,34 @@ export function renderTranslatedOverlay(canvas, sourceImg, blocks, naturalWidth,
       `| ${orientation} | eraseBox: x=${x} y=${y} w=${width} h=${height}`
     );
 
-    // Step 1: 원문 영역 지우기
-    ctx.fillStyle = bgColor;
+    // Step 1: 텍스트 영역에 반투명 흰색 배경 (배경색 보존, 가독성 확보)
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(x, y, width, height);
+    ctx.globalAlpha = 1.0;
 
-    // Step 2: 번역문 렌더링
+    // Step 2: 번역문 렌더링 (항상 수평 — vertical/rotated 무시)
     const padX = 3, padY = 2;
     const drawX = x + padX;
     const drawY = y + padY;
     const drawW = width - padX * 2;
     const drawH = height - padY * 2;
-    if (drawW <= 0 || drawH <= 0) return;
+    if (drawW <= 0 || drawH <= 0) { ctx.restore(); return; }
 
-    ctx.save();
+    const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
+    ctx.font = `${fontSize}px sans-serif`;
+    ctx.textBaseline = "top";
+
+    // 흰색 테두리 (가독성용 — 배경색과 무관하게 텍스트 윤곽 확보)
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = Math.max(1.5, fontSize * 0.12);
+    ctx.lineJoin = "round";
+    wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, true);
+
+    // 텍스트 색상 (대비 보정된 값 사용)
     ctx.fillStyle = textColor;
-
-    if (orientation === "vertical") {
-      // 세로 텍스트: 중앙 기준 90도 회전
-      const cx = x + width / 2;
-      const cy = y + height / 2;
-      ctx.translate(cx, cy);
-      ctx.rotate(Math.PI / 2);
-      const rotW = drawH, rotH = drawW;
-      const fontSize = calculateFitFontSize(ctx, block.translatedText, rotW, rotH);
-      ctx.font = `${fontSize}px sans-serif`;
-      ctx.textBaseline = "top";
-      wrapText(ctx, block.translatedText, -rotW / 2, -rotH / 2, rotW, fontSize * 1.25, false);
-    } else if (orientation === "rotated") {
-      // 회전(45도 사선) 텍스트: 가독성을 위해 수평 렌더링으로 폴백
-      const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
-      ctx.font = `${fontSize}px sans-serif`;
-      ctx.textBaseline = "top";
-      wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, false);
-    } else {
-      // 수평 (기본)
-      const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
-      ctx.font = `${fontSize}px sans-serif`;
-      ctx.textBaseline = "top";
-
-      // 외곽선 (stroke) 적용
-      if (block.strokeColor && block.strokeColor !== textColor) {
-        ctx.strokeStyle = block.strokeColor;
-        ctx.lineWidth = Math.max(1, fontSize * 0.08);
-        ctx.lineJoin = "round";
-        wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, true);
-      }
-
-      wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, false);
-    }
+    wrapText(ctx, block.translatedText, drawX, drawY, drawW, fontSize * 1.25, false);
 
     ctx.restore();
   });
