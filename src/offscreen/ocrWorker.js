@@ -509,7 +509,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// ── 크롭/합성 메시지 핸들러 (고급 하이브리드 파이프라인용) ──
+// ── 크롭/합성/스프라이트 메시지 핸들러 (고급 하이브리드 파이프라인용) ──
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "cropBoxes") {
@@ -522,6 +522,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "compositeCrops") {
     compositeCrops(message.originalDataUrl, message.crops)
       .then(dataUrl => sendResponse({ success: true, dataUrl }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
+
+  if (message.action === "buildSpriteSheet") {
+    buildSpriteSheet(message.crops, message.gap || 4)
+      .then(result => sendResponse({ success: true, ...result }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
+
+  if (message.action === "splitSpriteSheet") {
+    splitSpriteSheet(message.dataUrl, message.layout, message.cropBboxes)
+      .then(crops => sendResponse({ success: true, crops }))
       .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
     return true;
   }
@@ -603,8 +617,102 @@ async function compositeCrops(originalDataUrl, crops) {
     reader.readAsDataURL(blob);
   });
 
-  console.log(`[OCR Worker] 합성 완료: ${crops.length}개 크롭 → ${bgImg.width || "?"}×${bgImg.height || "?"}px`);
+  console.log(`[OCR Worker] 합성 완료: ${crops.length}개 크롭`);
   return dataUrl;
+}
+
+/**
+ * 크롭들을 세로로 쌓아 스프라이트 시트 생성.
+ * @param {Array<{dataUrl, bbox}>} crops - 크롭 배열
+ * @param {number} gap - 크롭 간 간격 (px)
+ * @returns {{ dataUrl, layout: {regions, spriteWidth, spriteHeight} }}
+ */
+async function buildSpriteSheet(crops, gap) {
+  // 각 크롭 이미지 로드 + 치수 파악
+  const images = [];
+  for (const crop of crops) {
+    const img = await loadImageBitmap(crop.dataUrl);
+    images.push({ img, width: img.width, height: img.height, bbox: crop.bbox });
+  }
+
+  const maxWidth = Math.max(...images.map(i => i.width));
+  let totalHeight = 0;
+  const regions = [];
+
+  for (let i = 0; i < images.length; i++) {
+    regions.push({ y: totalHeight, width: images[i].width, height: images[i].height });
+    totalHeight += images[i].height;
+    if (i < images.length - 1) totalHeight += gap;
+  }
+
+  // 캔버스에 세로 스택 + 구분선
+  const canvas = new OffscreenCanvas(maxWidth, totalHeight);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#E8E8E8";
+  ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+  for (let i = 0; i < images.length; i++) {
+    ctx.drawImage(images[i].img, 0, regions[i].y);
+    images[i].img.close();
+
+    // 구분선 (마지막 크롭 제외)
+    if (i < images.length - 1 && gap > 0) {
+      ctx.fillStyle = "#808080";
+      ctx.fillRect(0, regions[i].y + regions[i].height, maxWidth, gap);
+    }
+  }
+
+  const blob = await canvas.convertToBlob({ type: "image/png" });
+  const reader = new FileReader();
+  const dataUrl = await new Promise(resolve => {
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+
+  const layout = { regions, spriteWidth: maxWidth, spriteHeight: totalHeight, gap };
+  console.log(`[OCR Worker] 스프라이트 시트: ${maxWidth}×${totalHeight}px (${crops.length}개 크롭, gap=${gap})`);
+  return { dataUrl, layout };
+}
+
+/**
+ * 번역된 스프라이트 시트를 개별 크롭으로 분할.
+ * 출력 해상도가 입력과 다를 수 있으므로 비례 스케일링 적용.
+ * @param {string} dataUrl - 번역된 스프라이트 base64
+ * @param {{ regions, spriteWidth, spriteHeight }} layout - 원본 레이아웃
+ * @param {Array<{x,y,width,height}>} cropBboxes - 원본 이미지 상의 크롭 좌표
+ * @returns {Array<{bbox, dataUrl}>}
+ */
+async function splitSpriteSheet(dataUrl, layout, cropBboxes) {
+  const img = await loadImageBitmap(dataUrl);
+  const sx = img.width / layout.spriteWidth;
+  const sy = img.height / layout.spriteHeight;
+
+  console.log(`[OCR Worker] 스프라이트 분할: 입력 ${layout.spriteWidth}×${layout.spriteHeight} → 출력 ${img.width}×${img.height} (scale ${sx.toFixed(2)}×${sy.toFixed(2)})`);
+
+  const results = [];
+  for (let i = 0; i < layout.regions.length; i++) {
+    const r = layout.regions[i];
+    const cy = Math.round(r.y * sy);
+    const cw = Math.round(r.width * sx);
+    const ch = Math.round(r.height * sy);
+
+    const canvas = new OffscreenCanvas(cw, ch);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, cy, cw, ch, 0, 0, cw, ch);
+
+    const blob = await canvas.convertToBlob({ type: "image/png" });
+    const reader = new FileReader();
+    const cropUrl = await new Promise(resolve => {
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+
+    results.push({ bbox: cropBboxes[i], dataUrl: cropUrl });
+  }
+
+  img.close();
+  console.log(`[OCR Worker] 스프라이트 분할 완료: ${results.length}개 크롭`);
+  return results;
 }
 
 console.log("[OCR Worker] Offscreen OCR Worker 초기화 완료 — ort 존재:", typeof ort !== "undefined");

@@ -1,5 +1,5 @@
 import { translateImageWithVision, locateBoundingBoxesWithVision } from "../api/image/vision.js";
-import { translatePremiumGemini, translatePremiumOpenAI, translateCropGemini, translateCropOpenAI, incrementImageCount } from "../api/image/imageTranslate.js";
+import { translatePremiumGemini, translatePremiumOpenAI, translateCropGemini, translateCropOpenAI, translateSpriteGemini, translateSpriteOpenAI, incrementImageCount } from "../api/image/imageTranslate.js";
 import { runCustomOcrServer } from "../api/image/customOcrServer.js";
 import { translateTextArray } from "./translationService.js";
 import { cleanOcrTextForTranslation } from "../utils/cleaner.js";
@@ -312,9 +312,9 @@ export async function handlePremiumTranslation(message, sender) {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // Step 2: 박스별 크롭 → Image Gen API → 번역 크롭
+  // Step 2: 스프라이트 시트 → Image Gen API 1회 호출 → 분할 → 합성
   // ══════════════════════════════════════════════════════════════
-  console.log(`[WT Premium Hybrid] Step 2: ${translationPairs.length}개 크롭 → ${engine} Image Gen`);
+  console.log(`[WT Premium Hybrid] Step 2: ${translationPairs.length}개 크롭 → 스프라이트 시트 → ${engine} Image Gen`);
 
   // 2a. Offscreen에서 크롭 생성
   const boxes = translationPairs.map(p => p.bbox);
@@ -328,55 +328,54 @@ export async function handlePremiumTranslation(message, sender) {
   const crops = cropResult.crops;
   console.log(`[WT Premium Hybrid] 크롭 생성 완료: ${crops.length}개`);
 
-  // 2b. 크롭별 Image Gen API 호출 (세마포어 3개 병렬)
-  const translatedCrops = await runWithConcurrency(
-    translationPairs.map((pair, i) => async () => {
-      const crop = crops[i];
-      console.log(`[WT Premium Hybrid] 크롭#${i} "${pair.original.substring(0, 20)}" → "${pair.translated.substring(0, 20)}"`);
-      try {
-        let translatedDataUrl;
-        if (engine === "openai") {
-          translatedDataUrl = await translateCropOpenAI({
-            base64DataUrl: crop.dataUrl,
-            apiKey: message.openaiApiKey || "",
-            model: message.imagePremOpenAISynthModel || "gpt-image-2",
-            originalText: pair.original,
-            translatedText: pair.translated,
-            targetLang: message.targetLang || "ko",
-          });
-        } else {
-          translatedDataUrl = await translateCropGemini({
-            base64DataUrl: crop.dataUrl,
-            apiKey: message.apiKey || "",
-            model: message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
-            originalText: pair.original,
-            translatedText: pair.translated,
-            targetLang: message.targetLang || "ko",
-          });
-        }
-        return { bbox: crop.bbox, dataUrl: translatedDataUrl };
-      } catch (e) {
-        console.warn(`[WT Premium Hybrid] 크롭#${i} 실패:`, e.message);
-        return null; // 실패한 크롭은 원본 유지
-      }
-    }),
-    3 // 최대 동시 실행 수
-  );
+  // 2b. 스프라이트 시트 빌드
+  const spriteResult = await chrome.runtime.sendMessage({
+    action: "buildSpriteSheet",
+    crops,
+    gap: 4,
+  });
+  if (!spriteResult?.success) throw new Error("스프라이트 빌드 실패: " + (spriteResult?.error || "unknown"));
+  console.log(`[WT Premium Hybrid] 스프라이트 시트: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px`);
 
-  const successCrops = translatedCrops.filter(c => c !== null);
-  console.log(`[WT Premium Hybrid] Step 2 완료: ${successCrops.length}/${translationPairs.length} 성공`);
+  // 2c. 스프라이트 시트 1회 API 호출
+  let translatedSpriteUrl;
+  if (engine === "openai") {
+    translatedSpriteUrl = await translateSpriteOpenAI({
+      base64DataUrl: spriteResult.dataUrl,
+      apiKey: message.openaiApiKey || "",
+      model: message.imagePremOpenAISynthModel || "gpt-image-2",
+      translationPairs,
+      targetLang: message.targetLang || "ko",
+    });
+  } else {
+    translatedSpriteUrl = await translateSpriteGemini({
+      base64DataUrl: spriteResult.dataUrl,
+      apiKey: message.apiKey || "",
+      model: message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
+      translationPairs,
+      targetLang: message.targetLang || "ko",
+    });
+  }
+  console.log("[WT Premium Hybrid] 스프라이트 번역 완료");
+
+  // 2d. 번역된 스프라이트 분할
+  const cropBboxes = crops.map(c => c.bbox);
+  const splitResult = await chrome.runtime.sendMessage({
+    action: "splitSpriteSheet",
+    dataUrl: translatedSpriteUrl,
+    layout: spriteResult.layout,
+    cropBboxes,
+  });
+  if (!splitResult?.success) throw new Error("스프라이트 분할 실패: " + (splitResult?.error || "unknown"));
+  console.log(`[WT Premium Hybrid] 분할 완료: ${splitResult.crops.length}개 크롭`);
 
   // ══════════════════════════════════════════════════════════════
   // Step 3: Offscreen에서 합성
   // ══════════════════════════════════════════════════════════════
-  if (successCrops.length === 0) {
-    throw new Error("모든 크롭 번역이 실패했습니다.");
-  }
-
   const compositeResult = await chrome.runtime.sendMessage({
     action: "compositeCrops",
     originalDataUrl: base64DataUrl,
-    crops: successCrops,
+    crops: splitResult.crops,
   });
   if (!compositeResult?.success) throw new Error("합성 실패: " + (compositeResult?.error || "unknown"));
 

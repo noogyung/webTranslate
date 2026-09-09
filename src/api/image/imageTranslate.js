@@ -70,6 +70,115 @@ export function buildCropPrompt(originalText, translatedText, targetLang) {
 }
 
 /**
+ * 스프라이트 시트 전용 프롬프트.
+ */
+function buildSpritePrompt(translationPairs, targetLang) {
+  const langName = getLanguageName(targetLang);
+  let prompt = `You are a professional manga/webtoon image editor.\n\n`;
+  prompt += `This image contains ${translationPairs.length} text regions stacked vertically, separated by gray lines.\n`;
+  prompt += `Replace the text in each region with its ${langName} translation, from top to bottom:\n\n`;
+
+  translationPairs.forEach((pair, i) => {
+    const orig = pair.original.replace(/\n/g, "\\n");
+    const trans = pair.translated.replace(/\n/g, "\\n");
+    prompt += `[${i + 1}] "${orig}" → "${trans}"\n`;
+  });
+
+  prompt +=
+    `\nRULES:\n` +
+    `- PRESERVE backgrounds, speech bubbles, and art in each region EXACTLY.\n` +
+    `- Match the original font style, size, weight, and color.\n` +
+    `- Each numbered region must have ONLY its text replaced.\n` +
+    `- Do NOT alter the gray separator lines between regions.\n` +
+    `- Do NOT add watermarks, borders, or artifacts.\n` +
+    `- Output ONLY the modified image with the same dimensions.`;
+
+  return prompt;
+}
+
+/**
+ * 스프라이트 시트 Gemini Image-to-Image 번역 (1회 API 호출).
+ */
+export async function translateSpriteGemini({ base64DataUrl, apiKey, model, translationPairs, targetLang }) {
+  const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
+  const base64Data = base64DataUrl.split(",")[1];
+  const prompt = buildSpritePrompt(translationPairs, targetLang);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64Data } }
+        ]
+      }],
+      generationConfig: {
+        response_modalities: ["IMAGE"],
+        temperature: 0.2
+      }
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => null);
+    throw new Error(`Gemini Sprite API 오류 (${response.status}): ${errJson?.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inline_data);
+  if (!imagePart) throw new Error("Gemini Sprite API: 이미지 미반환");
+  return `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+}
+
+/**
+ * 스프라이트 시트 OpenAI GPT Image 번역 (1회 API 호출).
+ */
+export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, translationPairs, targetLang }) {
+  const prompt = buildSpritePrompt(translationPairs, targetLang);
+  const base64Data = base64DataUrl.split(",")[1];
+  const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
+  const byteChars = atob(base64Data);
+  const byteArray = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([byteArray], { type: mimeType });
+
+  const formData = new FormData();
+  formData.append("model", model || "gpt-image-2");
+  formData.append("prompt", prompt);
+  formData.append("image", blob, "sprite.png");
+
+  const response = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: formData,
+    signal: AbortSignal.timeout(120000),
+  });
+
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => null);
+    throw new Error(`OpenAI Sprite API 오류 (${response.status}): ${errJson?.error?.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data.data?.[0]?.b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
+  if (data.data?.[0]?.url) {
+    const imgRes = await fetch(data.data[0].url);
+    const imgBlob = await imgRes.blob();
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(imgBlob);
+    });
+  }
+  throw new Error("OpenAI Sprite API: 이미지 미반환");
+}
+
+/**
  * 고급 모드: Gemini Image-to-Image 번역.
  * @param {Array} translationPairs - 사전 번역 쌍 (2단계 파이프라인)
  */
