@@ -41,7 +41,8 @@
         "src/content/*",
         "src/content/image/*",
         "src/models/*",
-        "src/offscreen/*"
+        "src/offscreen/*",
+        "src/test/*"
       ],
       "matches": [
         "<all_urls>"

@@ -49,11 +49,12 @@ canvas { max-width: 100%; border-radius: 8px; border: 1px solid #333; }
 </div>
 
 <div id="controls">
-  <label>언어: <select id="lang-select">
-    <option value="ja" selected>日本語 (ja)</option>
-    <option value="ko">한국어 (ko)</option>
-    <option value="zh">中文 (zh)</option>
-    <option value="en">English (en)</option>
+  <label>모델: <select id="lang-select">
+    <option value="v6" selected>✨ PP-OCRv6 (50언어 통합)</option>
+    <option value="ja">v3 日本語 (ja)</option>
+    <option value="ko">v3 한국어 (ko)</option>
+    <option value="zh">v4 中文 (zh)</option>
+    <option value="en">v3 English (en)</option>
   </select></label>
   <label>Det Thresh: <input type="number" id="det-thresh" value="0.2" step="0.05" min="0.05" max="0.9" class="ctrl-input"></label>
   <label>Box Thresh: <input type="number" id="box-thresh" value="0.4" step="0.05" min="0.1" max="0.9" class="ctrl-input"></label>

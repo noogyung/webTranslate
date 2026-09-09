@@ -3,12 +3,14 @@
 
 let detSession = null, recSession = null, currentRecLang = null, charDict = null;
 let loadedImage = null, ortInitialized = false;
+let currentDetVersion = null; // "v4" or "v6"
 
 const REC_MODELS = {
-  ko: { model: "korean_PP-OCRv3_rec_infer.onnx", dict: "korean_dict.txt" },
-  ja: { model: "japan_PP-OCRv3_rec_infer.onnx", dict: "japan_dict.txt" },
-  zh: { model: "ch_PP-OCRv4_rec_infer.onnx", dict: "ppocr_keys_v1.txt" },
-  en: { model: "en_PP-OCRv3_rec_infer.onnx", dict: "en_dict.txt" },
+  v6: { det: "PP-OCRv6_small_det.onnx", model: "PP-OCRv6_small_rec.onnx", dict: "ppocrv6_dict.txt" },
+  ko: { det: "ch_PP-OCRv4_det_infer.onnx", model: "korean_PP-OCRv3_rec_infer.onnx", dict: "korean_dict.txt" },
+  ja: { det: "ch_PP-OCRv4_det_infer.onnx", model: "japan_PP-OCRv3_rec_infer.onnx", dict: "japan_dict.txt" },
+  zh: { det: "ch_PP-OCRv4_det_infer.onnx", model: "ch_PP-OCRv4_rec_infer.onnx", dict: "ppocr_keys_v1.txt" },
+  en: { det: "ch_PP-OCRv4_det_infer.onnx", model: "en_PP-OCRv3_rec_infer.onnx", dict: "en_dict.txt" },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -27,31 +29,36 @@ function initOrt() {
 }
 
 async function loadModel(type, url) {
-  const t0 = performance.now();
-  const res = await fetch(url);
+  var t0 = performance.now();
+  var res = await fetch(url);
   if (!res.ok) throw new Error("HTTP " + res.status + ": " + url);
-  const buf = await res.arrayBuffer();
-  const session = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
+  var buf = await res.arrayBuffer();
+  var session = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
   log("[" + type + "] 로드: " + (buf.byteLength / 1024 / 1024).toFixed(1) + "MB, " + Math.round(performance.now() - t0) + "ms");
   return session;
 }
 
-async function ensureDet() {
-  if (detSession) return;
+async function ensureDet(lang) {
+  var cfg = REC_MODELS[lang] || REC_MODELS.v6;
+  var detFile = cfg.det;
+  var detVer = lang === "v6" ? "v6" : "v4";
+  if (detSession && currentDetVersion === detVer) return;
+  if (detSession) { detSession.release(); detSession = null; }
   initOrt();
-  setStatus("Det 모델 로딩...");
-  detSession = await loadModel("Det", modelBase() + "ch_PP-OCRv4_det_infer.onnx");
+  setStatus("Det 모델 로딩 (" + detVer + ")...");
+  detSession = await loadModel("Det", modelBase() + detFile);
+  currentDetVersion = detVer;
 }
 
 async function ensureRec(lang) {
   if (recSession && currentRecLang === lang) return;
   if (recSession) { recSession.release(); recSession = null; charDict = null; }
   initOrt();
-  const cfg = REC_MODELS[lang] || REC_MODELS.ja;
+  var cfg = REC_MODELS[lang] || REC_MODELS.v6;
   setStatus("Rec 모델 로딩 (" + lang + ")...");
   recSession = await loadModel("Rec", modelBase() + cfg.model);
-  const dictRes = await fetch(modelBase() + cfg.dict);
-  const dictText = await dictRes.text();
+  var dictRes = await fetch(modelBase() + cfg.dict);
+  var dictText = await dictRes.text();
   charDict = dictText.split("\n").map(function (l) { return l.trim(); }).filter(function (l) { return l.length > 0; });
   charDict.push(" ");
   currentRecLang = lang;
@@ -240,7 +247,7 @@ async function runOcr() {
   var t0 = performance.now();
 
   try {
-    await ensureDet();
+    await ensureDet(lang);
     await ensureRec(lang);
     log("[모델] 로드 완료: " + Math.round(performance.now() - t0) + "ms");
 
