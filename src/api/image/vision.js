@@ -34,40 +34,20 @@ export async function translateImageWithVision({
     ? `Image size: ${naturalWidth}x${naturalHeight}px.\n`
     : "";
 
-  // Gemini는 [ymin,xmin,ymax,xmax] 0~1000 정규화, GPT/Other는 [xmin,ymin,xmax,ymax] 픽셀
-  const isGemini = (mode === "gemini");
-
-  let prompt;
-  if (isGemini) {
-    // Gemini: 0~1000 정규화 좌표
-    prompt =
-      `You are a high-precision OCR translator for image translation.\n\n` +
-      dimNote +
-      `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
-      `- eraseBox: [ymin,xmin,ymax,xmax] 0-1000 normalized scale (e.g. 500=50% of image).\n` +
-      `- originalText: exact extracted text, line breaks as \\n.\n` +
-      `- translatedText: ${langName} translation preserving line breaks.\n` +
-      `- orientation: "horizontal" | "vertical" | "rotated".\n` +
-      `- textColor: dominant text color as #RRGGBB.\n` +
-      `Return valid JSON array only. No markdown.\n\n` +
-      `[{"eraseBox":[y1,x1,y2,x2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
-  } else {
-    // GPT / Other Vision: 픽셀 좌표, 말풍선 개별 탐지 최적화
-    const langName = getLanguageName(targetLang);
-    prompt =
-      `You are a manga/comic OCR translator. Scan the ENTIRE image from top to bottom.\n\n` +
-      dimNote +
-      `IMPORTANT: Treat each individual speech bubble, thought bubble, caption box, and sound effect as a SEPARATE block. Do NOT merge multiple bubbles into one. Do NOT miss any text anywhere in the image.\n\n` +
-      `For each text block, return exactly these 5 fields:\n` +
-      `- eraseBox: [xmin, ymin, xmax, ymax] in PIXEL coordinates of this ${naturalWidth}x${naturalHeight}px image. Must be tight around the text.\n` +
-      `  Example for text at upper-right: [820, 45, 1200, 310]\n` +
-      `- originalText: exact text extracted, line breaks as \\n.\n` +
-      `- translatedText: ${langName} translation. Preserve natural line breaks.\n` +
-      `- orientation: "horizontal" | "vertical" (vertical = text runs top-to-bottom).\n` +
-      `- textColor: text color as #RRGGBB.\n\n` +
-      `Return a valid JSON array only. No markdown fences. No explanation.\n\n` +
-      `[{"eraseBox":[x1,y1,x2,y2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
-  }
+  // 모든 모드 통일: [ymin,xmin,ymax,xmax] 0~1000 정규화 좌표
+  // Gemini는 이 형식을 명시적으로 학습. GPT/Other도 동일 형식으로 요청.
+  const prompt =
+    `You are a high-precision OCR translator for image translation.\n\n` +
+    dimNote +
+    `Detect every visible text block. Return ONLY these 5 fields per block in JSON.\n` +
+    `- eraseBox: [ymin,xmin,ymax,xmax] normalized 0-1000 scale (0=top/left, 1000=bottom/right).\n` +
+    `  Example: text in upper-right → [50,700,200,980]; center → [400,300,600,700]\n` +
+    `- originalText: exact extracted text, line breaks as \\n.\n` +
+    `- translatedText: ${langName} translation preserving line breaks.\n` +
+    `- orientation: "horizontal" | "vertical".\n` +
+    `- textColor: dominant text color as #RRGGBB.\n` +
+    `Return valid JSON array only. No markdown.\n\n` +
+    `[{"eraseBox":[y1,x1,y2,x2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
 
   let rawContent = "";
 
@@ -143,18 +123,16 @@ export async function translateImageWithVision({
     return [];
   }
 
-  // OpenAI/Other Vision: 픽셀 좌표 → forcePixel=true (정규화 판정 없이 픽셀 직접 사용)
-  const forcePixel = (mode === "openai" || mode === "other_vision");
-
+  // 모든 모드 동일: normalizeBox가 0~1000 자동 감지 후 역정규화
   const finalBlocks = ocrBlocks.map((block) => ({
     ...block,
     translatedText: block.translatedText?.trim() || block.originalText || "",
-    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight, forcePixel),
-    glyphBox: block.glyphBox ? normalizeBox(block.glyphBox, naturalWidth, naturalHeight, forcePixel) : null,
-    containerBox: block.containerBox ? normalizeBox(block.containerBox, naturalWidth, naturalHeight, forcePixel) : null,
+    eraseBox: normalizeBox(block.eraseBox, naturalWidth, naturalHeight),
+    glyphBox: block.glyphBox ? normalizeBox(block.glyphBox, naturalWidth, naturalHeight) : null,
+    containerBox: block.containerBox ? normalizeBox(block.containerBox, naturalWidth, naturalHeight) : null,
   })).filter(b => b.eraseBox !== null);
 
-  console.log(`[WT Vision] 1-Pass 완료 — ${finalBlocks.length}블록 (mode=${mode}, forcePixel=${forcePixel})`);
+  console.log(`[WT Vision] 1-Pass 완료 — ${finalBlocks.length}블록 (mode=${mode})`);
   return finalBlocks;
 }
 
@@ -196,24 +174,15 @@ function parseVisionJsonResponse(rawText) {
 export function normalizeBox(rawBox, naturalWidth, naturalHeight, forcePixel = false) {
   if (!rawBox || !Array.isArray(rawBox) || rawBox.length !== 4) return null;
 
-  let px_x1, px_y1, px_x2, px_y2;
-  let wasNorm = false;
+  // [ymin, xmin, ymax, xmax] 0~1000 정규화 좌표 자동 감지
+  const [ymin, xmin, ymax, xmax] = rawBox;
+  const maxCoord = Math.max(ymin, xmin, ymax, xmax);
+  const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
 
-  if (forcePixel) {
-    // GPT/Other Vision: [xmin, ymin, xmax, ymax] 픽셀 좌표 (표준 이미지 좌표계)
-    const [xmin, ymin, xmax, ymax] = rawBox;
-    px_x1 = xmin; px_y1 = ymin; px_x2 = xmax; px_y2 = ymax;
-  } else {
-    // Gemini: [ymin, xmin, ymax, xmax] 0~1000 정규화 좌표 자동 감지
-    const [ymin, xmin, ymax, xmax] = rawBox;
-    const maxCoord = Math.max(ymin, xmin, ymax, xmax);
-    const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
-    wasNorm = isNorm;
-    px_x1 = isNorm ? (xmin / 1000) * naturalWidth : xmin;
-    px_y1 = isNorm ? (ymin / 1000) * naturalHeight : ymin;
-    px_x2 = isNorm ? (xmax / 1000) * naturalWidth : xmax;
-    px_y2 = isNorm ? (ymax / 1000) * naturalHeight : ymax;
-  }
+  const px_x1 = isNorm ? (xmin / 1000) * naturalWidth : xmin;
+  const px_y1 = isNorm ? (ymin / 1000) * naturalHeight : ymin;
+  const px_x2 = isNorm ? (xmax / 1000) * naturalWidth : xmax;
+  const px_y2 = isNorm ? (ymax / 1000) * naturalHeight : ymax;
 
   const PAD = 2;
   const x = Math.max(0, Math.round(px_x1) - PAD);
@@ -222,5 +191,5 @@ export function normalizeBox(rawBox, naturalWidth, naturalHeight, forcePixel = f
   const y2 = Math.min(naturalHeight || Infinity, Math.round(px_y2) + PAD);
   const w = x2 - x, h = y2 - y;
   if (w <= 0 || h <= 0) return null;
-  return { x, y, width: w, height: h, _wasNormalized: wasNorm };
+  return { x, y, width: w, height: h, _wasNormalized: isNorm };
 }
