@@ -383,7 +383,7 @@
       <!-- ── 일반 번역 엔진 4종 ── -->
       <div style="margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
         <div style="font-size: 13px; color: #a6e3a1; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
-          🔍 OCR 엔진 (텍스트 인식) — 일반/고급 공통
+          🔍 일반 번역 (OCR → 텍스트 오버레이) 엔진
         </div>
 
         <!-- 일반 엔진 라디오 -->
@@ -491,18 +491,18 @@
       <!-- ── 고급 번역 엔진 3종 ── -->
       <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
         <div style="font-size: 13px; color: #89b4fa; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
-          ⚡ 이미지 합성 엔진 — 고급 모드 전용
+          ⚡ 고급 번역 (AI 이미지 합성 — 512px 고속 완주) 엔진
         </div>
 
         <!-- 고급 엔진 라디오 -->
         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
           <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
             <input type="radio" name="imagePremEngine" value="gemini" style="accent-color: #89b4fa;" />
-            ✨ Gemini Image (추천)
+            ✨ Gemini (추천)
           </label>
           <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
             <input type="radio" name="imagePremEngine" value="openai" style="accent-color: #89b4fa;" />
-            🤖 GPT Image
+            🤖 GPT
           </label>
           <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #cbd5e1; cursor: pointer; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
             <input type="radio" name="imagePremEngine" value="other" style="accent-color: #89b4fa;" />
@@ -512,8 +512,19 @@
 
         <!-- 고급 Gemini -->
         <div id="premGeminiSection">
+          <div class="field-row">
+            <label class="field-label" for="imagePremGeminiOcrModel">Step 1 OCR 모델 (텍스트 추출)</label>
+            <input type="text" id="imagePremGeminiOcrModel" class="text-input"
+              list="premGeminiOcrModelList"
+              placeholder="gemini-flash-lite-latest"
+              spellcheck="false" />
+            <datalist id="premGeminiOcrModelList">
+              <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (추천 - 초고속)</option>
+              <option value="gemini-flash-latest">gemini-flash-latest</option>
+            </datalist>
+          </div>
           <div class="field-row" style="margin-top: 10px;">
-            <label class="field-label" for="imagePremGeminiSynthModel">이미지 합성 모델 (이미지 생성)</label>
+            <label class="field-label" for="imagePremGeminiSynthModel">Step 2 합성 모델 (이미지 생성)</label>
             <input type="text" id="imagePremGeminiSynthModel" class="text-input"
               list="premGeminiSynthModelList"
               placeholder="gemini-3.1-flash-image"
@@ -531,8 +542,19 @@
 
         <!-- 고급 GPT -->
         <div id="premOpenAISection" style="display: none;">
+          <div class="field-row">
+            <label class="field-label" for="imagePremOpenAIOcrModel">Step 1 OCR 모델 (텍스트 추출)</label>
+            <input type="text" id="imagePremOpenAIOcrModel" class="text-input"
+              list="premOpenAIOcrModelList"
+              placeholder="gpt-5.6-luna"
+              spellcheck="false" />
+            <datalist id="premOpenAIOcrModelList">
+              <option value="gpt-5.6-luna">gpt-5.6-luna (추천 - 2026 최신 경량)</option>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+            </datalist>
+          </div>
           <div class="field-row" style="margin-top: 10px;">
-            <label class="field-label" for="imagePremOpenAISynthModel">이미지 합성 모델 (이미지 생성)</label>
+            <label class="field-label" for="imagePremOpenAISynthModel">Step 2 합성 모델 (이미지 생성)</label>
             <input type="text" id="imagePremOpenAISynthModel" class="text-input"
               list="premOpenAISynthModelList"
               placeholder="gpt-image-2"
@@ -561,7 +583,18 @@
               autocomplete="off" spellcheck="false" />
           </div>
           <div class="field-row" style="margin-top: 10px;">
-            <label class="field-label" for="imagePremOtherSynthModel">이미지 합성 모델명</label>
+            <label class="field-label" for="imagePremOtherOcrModel">Step 1 OCR 모델명</label>
+            <input type="text" id="imagePremOtherOcrModel" class="text-input"
+              list="premOtherOcrModelList"
+              placeholder="qwen2.5-vl"
+              spellcheck="false" />
+            <datalist id="premOtherOcrModelList">
+              <option value="qwen2.5-vl">qwen2.5-vl</option>
+              <option value="llava">llava</option>
+            </datalist>
+          </div>
+          <div class="field-row" style="margin-top: 10px;">
+            <label class="field-label" for="imagePremOtherSynthModel">Step 2 합성 모델명</label>
             <input type="text" id="imagePremOtherSynthModel" class="text-input"
               list="premOtherSynthModelList"
               placeholder="sd_inpainting_model"

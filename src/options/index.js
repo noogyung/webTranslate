@@ -80,10 +80,13 @@ const imagePremEngineRadios = document.querySelectorAll('input[name="imagePremEn
 const premGeminiSection = document.getElementById("premGeminiSection");
 const premOpenAISection = document.getElementById("premOpenAISection");
 const premOtherSection = document.getElementById("premOtherSection");
+const imagePremGeminiOcrModelInput = document.getElementById("imagePremGeminiOcrModel");
 const imagePremGeminiSynthModelInput = document.getElementById("imagePremGeminiSynthModel");
+const imagePremOpenAIOcrModelInput = document.getElementById("imagePremOpenAIOcrModel");
 const imagePremOpenAISynthModelInput = document.getElementById("imagePremOpenAISynthModel");
 const imagePremOtherUrlInput = document.getElementById("imagePremOtherUrl");
 const imagePremOtherKeyInput = document.getElementById("imagePremOtherKey");
+const imagePremOtherOcrModelInput = document.getElementById("imagePremOtherOcrModel");
 const imagePremOtherSynthModelInput = document.getElementById("imagePremOtherSynthModel");
 
 const customApiUrlInput = document.getElementById("customApiUrl");
@@ -164,10 +167,13 @@ async function initialize() {
   const savedPremEngine = settings.imagePremEngine || "gemini";
   const premRadio = document.querySelector(`input[name="imagePremEngine"][value="${savedPremEngine}"]`);
   if (premRadio) premRadio.checked = true;
+  if (imagePremGeminiOcrModelInput) imagePremGeminiOcrModelInput.value = settings.imagePremGeminiOcrModel || "gemini-flash-lite-latest";
   if (imagePremGeminiSynthModelInput) imagePremGeminiSynthModelInput.value = settings.imagePremGeminiSynthModel || "gemini-3.1-flash-image";
+  if (imagePremOpenAIOcrModelInput) imagePremOpenAIOcrModelInput.value = settings.imagePremOpenAIOcrModel || "gpt-5.6-luna";
   if (imagePremOpenAISynthModelInput) imagePremOpenAISynthModelInput.value = settings.imagePremOpenAISynthModel || "gpt-image-2";
   if (imagePremOtherUrlInput) imagePremOtherUrlInput.value = settings.imagePremOtherUrl || "http://localhost:7860";
   if (imagePremOtherKeyInput) imagePremOtherKeyInput.value = settings.imagePremOtherKey || "";
+  if (imagePremOtherOcrModelInput) imagePremOtherOcrModelInput.value = settings.imagePremOtherOcrModel || "qwen2.5-vl";
   if (imagePremOtherSynthModelInput) imagePremOtherSynthModelInput.value = settings.imagePremOtherSynthModel || "sd_inpainting_model";
   updatePremEngineSection(savedPremEngine);
 
@@ -466,10 +472,13 @@ if (saveBtn) {
       imageStdOtherModel: imageStdOtherModelInput ? imageStdOtherModelInput.value.trim() : "qwen2.5-vl",
       // v2.0 고급 번역 엔진
       imagePremEngine: document.querySelector('input[name="imagePremEngine"]:checked')?.value || "gemini",
+      imagePremGeminiOcrModel: imagePremGeminiOcrModelInput ? imagePremGeminiOcrModelInput.value.trim() : "gemini-flash-lite-latest",
       imagePremGeminiSynthModel: imagePremGeminiSynthModelInput ? imagePremGeminiSynthModelInput.value.trim() : "gemini-3.1-flash-image",
+      imagePremOpenAIOcrModel: imagePremOpenAIOcrModelInput ? imagePremOpenAIOcrModelInput.value.trim() : "gpt-5.6-luna",
       imagePremOpenAISynthModel: imagePremOpenAISynthModelInput ? imagePremOpenAISynthModelInput.value.trim() : "gpt-image-2",
       imagePremOtherUrl: imagePremOtherUrlInput ? imagePremOtherUrlInput.value.trim() : "http://localhost:7860",
       imagePremOtherKey: imagePremOtherKeyInput ? imagePremOtherKeyInput.value.trim() : "",
+      imagePremOtherOcrModel: imagePremOtherOcrModelInput ? imagePremOtherOcrModelInput.value.trim() : "qwen2.5-vl",
       imagePremOtherSynthModel: imagePremOtherSynthModelInput ? imagePremOtherSynthModelInput.value.trim() : "sd_inpainting_model",
       // v2.0 커스텀 엔진
       customApiUrl: customApiUrlInput ? customApiUrlInput.value.trim() : "",

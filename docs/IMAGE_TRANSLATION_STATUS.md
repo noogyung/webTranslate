@@ -2,15 +2,6 @@
 
 > **브랜치**: `v2.0-dev` | **최신 커밋**: `47bdfaa` | **날짜**: 2026-09-10
 
-## 최신 작업: OCR / Image Gen 분리 재작성
-
-- 사용자의 롤백 요청에 따라 Codex 커밋 `9635336`을 되돌리고 `a938276`을 기준으로 라우팅·UI만 재작성했다. 아래 본문은 과거 개발 기록이다.
-- `imageStdEngine` 및 일반 OCR 모델 설정을 고급 Step 1에서 공유한다. Step 2는 `imagePremEngine`에 저장된 합성 엔진을 사용한다.
-- content 메시지에서는 `imagePremSynthEngine`으로 의미를 명확히 하고, background는 구 메시지 키 `imagePremEngine`도 수용한다. 저장 키는 변경하지 않는다.
-- 고급 Gemini/GPT/Other의 OCR 모델 입력 UI만 제거하고, 기존 모델 storage 키와 값은 보존한다.
-- 일반 번역 코드, Vision 좌표 변환, 스프라이트 패킹·분할·합성 및 이미지 생성 API는 `a938276`과 동일하게 유지했다.
-- 모의 검증: PP-OCR/Gemini/GPT OCR × Gemini/GPT Image Gen 6조합, 구 메시지 호환성, 기준 코드 동일성 검사 통과. 실제 API 및 첨부 이미지의 시각적 재검증은 수행하지 않았다.
-
 ---
 
 ## 1. 커밋 히스토리 (이미지 번역 관련)

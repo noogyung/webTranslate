@@ -259,8 +259,7 @@ export async function handlePremiumTranslation(message, sender) {
     );
   }
 
-  const ocrEngine = message.imageStdEngine || "free";
-  const synthEngine = message.imagePremSynthEngine || message.imagePremEngine || "gemini";
+  const engine = message.imagePremEngine || "gemini";
 
   // ══════════════════════════════════════════════════════════════
   // Step 1: PP-OCR (로컬 WASM) + LLM 텍스트 번역
@@ -271,68 +270,44 @@ export async function handlePremiumTranslation(message, sender) {
 
   try {
     T.ocr0 = Date.now();
+    console.log("[WT Premium Hybrid] Step 1a: PP-OCR 실행...");
     await ensureOffscreenDocument();
-    if (ocrEngine === "free") {
-      console.log("[WT Premium Hybrid] Step 1a: PP-OCR 실행...");
-      const ocrResult = await chrome.runtime.sendMessage({
-        action: "runFreeOcr",
-        imageDataUrl: base64DataUrl,
-        lang: guessSourceLang(message.targetLang),
-      });
-      T.ocr1 = Date.now();
+    const ocrResult = await chrome.runtime.sendMessage({
+      action: "runFreeOcr",
+      imageDataUrl: base64DataUrl,
+      lang: guessSourceLang(message.targetLang),
+    });
+    T.ocr1 = Date.now();
 
-      if (!ocrResult?.success || !ocrResult.blocks?.length) {
-        console.warn("[WT Premium Hybrid] PP-OCR 미검출 → 기존 방식 폴백");
-        useFallback = true;
-      } else {
-        ocrBlocks = ocrResult.blocks;
-        console.log(`[WT Premium Hybrid] Step 1a 완료: ${ocrBlocks.length}개 블록 (${T.ocr1 - T.ocr0}ms)`);
-
-        // Step 1b: LLM 텍스트 번역
-        T.llm0 = Date.now();
-        console.log("[WT Premium Hybrid] Step 1b: LLM 텍스트 번역...");
-        const settings = await getSettings();
-        const texts = ocrBlocks
-          .map(b => cleanOcrTextForTranslation(b.text))
-          .filter(t => t.length > 0);
-        const translations = await translateTextArray(texts, settings);
-        T.llm1 = Date.now();
-
-        translationPairs = ocrBlocks.map((block, i) => ({
-          original: block.text,
-          translated: translations[i] || block.text,
-          bbox: block.bbox,
-        }));
-
-        // 번역 미적용 경고
-        const untranslated = translationPairs.filter(p => p.original === p.translated).length;
-        if (untranslated > 0) {
-          console.warn(`[WT Premium Hybrid] ⚠️ ${untranslated}/${translationPairs.length}개 블록이 번역되지 않음 (원문=번역)`);
-        }
-        console.log(`[WT Premium Hybrid] Step 1b 완료: ${translationPairs.length}개 번역 쌍 (${T.llm1 - T.llm0}ms)`);
-      }
+    if (!ocrResult?.success || !ocrResult.blocks?.length) {
+      console.warn("[WT Premium Hybrid] PP-OCR 미검출 → 기존 방식 폴백");
+      useFallback = true;
     } else {
-      const blocks = await translateImageWithVision({
-        base64DataUrl,
-        naturalWidth: message.compressedWidth || message.naturalWidth,
-        naturalHeight: message.compressedHeight || message.naturalHeight,
-        mode: ocrEngine === "other" ? "other_vision" : ocrEngine,
-        apiKey: message.apiKey || "",
-        geminiModel: message.imageStdGeminiModel || "",
-        openaiApiKey: message.openaiApiKey || "",
-        openaiModel: message.imageStdOpenAIModel || "",
-        otherVisionUrl: message.imageStdOtherUrl || "",
-        otherVisionKey: message.imageStdOtherKey || "",
-        otherVisionModel: message.imageStdOtherModel || "",
-        targetLang: message.targetLang || "ko",
-      });
-      translationPairs = blocks
-        .filter(b => b.originalText?.trim() && b.translatedText?.trim() && b.eraseBox)
-        .map(b => ({ original: b.originalText, translated: b.translatedText, bbox: b.eraseBox }));
-      T.ocr1 = Date.now();
-      T.llm0 = T.ocr1;
-      T.llm1 = T.ocr1;
-      useFallback = translationPairs.length === 0;
+      ocrBlocks = ocrResult.blocks;
+      console.log(`[WT Premium Hybrid] Step 1a 완료: ${ocrBlocks.length}개 블록 (${T.ocr1 - T.ocr0}ms)`);
+
+      // Step 1b: LLM 텍스트 번역
+      T.llm0 = Date.now();
+      console.log("[WT Premium Hybrid] Step 1b: LLM 텍스트 번역...");
+      const settings = await getSettings();
+      const texts = ocrBlocks
+        .map(b => cleanOcrTextForTranslation(b.text))
+        .filter(t => t.length > 0);
+      const translations = await translateTextArray(texts, settings);
+      T.llm1 = Date.now();
+
+      translationPairs = ocrBlocks.map((block, i) => ({
+        original: block.text,
+        translated: translations[i] || block.text,
+        bbox: block.bbox,
+      }));
+
+      // 번역 미적용 경고
+      const untranslated = translationPairs.filter(p => p.original === p.translated).length;
+      if (untranslated > 0) {
+        console.warn(`[WT Premium Hybrid] ⚠️ ${untranslated}/${translationPairs.length}개 블록이 번역되지 않음 (원문=번역)`);
+      }
+      console.log(`[WT Premium Hybrid] Step 1b 완료: ${translationPairs.length}개 번역 쌍 (${T.llm1 - T.llm0}ms)`);
     }
   } catch (ocrErr) {
     console.warn("[WT Premium Hybrid] Step 1 실패 → 기존 방식 폴백:", ocrErr.message);
@@ -344,7 +319,7 @@ export async function handlePremiumTranslation(message, sender) {
   // ══════════════════════════════════════════════════════════════
   if (useFallback) {
     console.log("[WT Premium Hybrid] 폴백: 기존 전체 이미지 방식 실행");
-    return await handlePremiumFallback(base64DataUrl, synthEngine, message);
+    return await handlePremiumFallback(base64DataUrl, engine, message);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -368,7 +343,7 @@ export async function handlePremiumTranslation(message, sender) {
   // 2b. 스프라이트 시트 1회 API 호출
   T.api0 = Date.now();
   let translatedSpriteUrl;
-  if (synthEngine === "openai") {
+  if (engine === "openai") {
     translatedSpriteUrl = await translateSpriteOpenAI({
       base64DataUrl: spriteResult.dataUrl,
       apiKey: message.openaiApiKey || "",
@@ -436,25 +411,23 @@ async function runWithConcurrency(tasks, limit = 3) {
 /**
  * 기존 전체 이미지 방식 폴백 (PP-OCR 미검출/실패 시).
  */
-async function handlePremiumFallback(base64DataUrl, synthEngine, message) {
+async function handlePremiumFallback(base64DataUrl, engine, message) {
   // Step 1 폴백: Vision API OCR
   let translationPairs = [];
   try {
-    const ocrEngine = message.imageStdEngine || "free";
-    const fallbackOcrEngine = ocrEngine === "free" ? synthEngine : ocrEngine;
-    const step1Mode = fallbackOcrEngine === "other" ? "other_vision" : fallbackOcrEngine;
+    const step1Mode = engine === "openai" ? "openai" : engine === "other" ? "other_vision" : "gemini";
     const ocrBlocks = await translateImageWithVision({
       base64DataUrl,
       naturalWidth: message.naturalWidth || 0,
       naturalHeight: message.naturalHeight || 0,
       mode: step1Mode,
       apiKey: message.apiKey || "",
-      geminiModel: message.imageStdGeminiModel || "",
+      geminiModel: message.imagePremGeminiOcrModel || "",
       openaiApiKey: message.openaiApiKey || "",
-      openaiModel: message.imageStdOpenAIModel || "",
-      otherVisionUrl: message.imageStdOtherUrl || "",
-      otherVisionKey: message.imageStdOtherKey || "",
-      otherVisionModel: message.imageStdOtherModel || "",
+      openaiModel: message.imagePremOpenAIOcrModel || "",
+      otherVisionUrl: message.imagePremOtherUrl || "",
+      otherVisionKey: message.imagePremOtherKey || "",
+      otherVisionModel: message.imagePremOtherOcrModel || "",
       targetLang: message.targetLang || "ko",
     });
     translationPairs = ocrBlocks
@@ -466,7 +439,7 @@ async function handlePremiumFallback(base64DataUrl, synthEngine, message) {
 
   // Step 2: 전체 이미지 방식
   let translatedDataUrl;
-  if (synthEngine === "openai") {
+  if (engine === "openai") {
     translatedDataUrl = await translatePremiumOpenAI({
       base64DataUrl, apiKey: message.openaiApiKey || "",
       model: message.imagePremOpenAISynthModel || "gpt-image-2",

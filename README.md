@@ -11,9 +11,8 @@
 * **마우스 호버 기반 이미지 번역**
   * 웹페이지 내 이미지에 마우스를 올리면 우측 상단에 `[번역]` 플로팅 버튼 자동 노출.
   * 번역 완료 후 원본 이미지와 번역본을 자유롭게 전환하는 `[원본 보기]` / `[번역 보기]` 원터치 토글 지원.
-* **OCR / 이미지 합성 엔진 분리**
-  * OCR 엔진과 모델은 일반·고급 모드가 공유합니다. PP-OCR은 텍스트 번역기를 사용하고, Gemini/GPT Vision은 OCR과 번역을 한 번에 수행합니다.
-  * 고급 모드에서는 Gemini Image 또는 GPT Image를 별도로 선택합니다. 기존 스프라이트 패킹·분할·합성 방식을 사용합니다.
+* **Gemini 2.0 Flash Multimodal Native 비전 파이프라인**
+  * 무거운 클라이언트 WASM/OCR 모델을 배제하고 Gemini 비전 API를 활용한 초경량·고정밀 텍스트 추출 및 번역.
 * **DPR / CSS Transform 보정 정밀 Canvas 오버레이**
   * 브라우저 DPR(Device Pixel Ratio), `object-fit`, `transform: scale()`을 정밀 계산하여 이미지 내 글자 위치를 1:1 완벽 정렬.
 

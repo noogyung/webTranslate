@@ -5,11 +5,6 @@
 
 ## [2.0.0-dev] - In Progress
 
-### Changed — 2026-09-10
-- Codex의 `9635336` 변경을 되돌리고, `a938276` 기준에서 고급 OCR / Image Gen 엔진 분리만 재작성.
-- 일반 OCR 설정을 고급 Step 1에서 공유하고 고급 엔진은 Step 2 합성에만 사용. 고급 OCR 모델 입력 UI 제거, 기존 storage 키 유지.
-- 일반 모드, Vision 좌표 변환, 스프라이트 패킹·분할·합성, 이미지 생성 API 및 패키징 스크립트는 기준 버전 그대로 유지.
-
 ### Added
 - **이미지 번역 전담 모듈 구조화**: `src/content/image/` (호버 감지, 캔버스 오버레이 렌더러, 다이얼로그)
 - **Git 자동 동기화 워크플로우**: 버전 기반 브랜칭 및 커밋/푸시 규칙 체계화 (`.agents/AGENTS.md`, `scripts/git-sync.ps1`)
