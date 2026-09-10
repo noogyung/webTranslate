@@ -1,9 +1,22 @@
 import { handleTranslation, handleWordDictionary, translateTextArray } from "./translationService.js";
 import { handleImageTranslation, handleBoundingBoxesLocation, handleStandardTranslation, handlePremiumTranslation, handlePremiumStep2Translation, fetchImageAsBase64 } from "./imageService.js";
 import { DEFAULT_SETTINGS, getSettings } from "../options/storage.js";
+import { replayImageDiagnostic } from "./imageService.js";
 
 export function initializeMessageHandlers() {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.action === "prepareImageDiagnostic" || message.action === "replayImageDiagnostic") {
+      if (_sender.url !== chrome.runtime.getURL("src/diagnostics/image.html")) {
+        sendResponse({ success: false, error: "진단 페이지에서만 실행할 수 있습니다." });
+        return false;
+      }
+      const task = message.action === "prepareImageDiagnostic"
+        ? handlePremiumTranslation({ ...message, diagnostic: true }, _sender)
+        : replayImageDiagnostic(message);
+      task.then(report => sendResponse({ success: true, report }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+    }
     if (message.action === "getSettings") {
       chrome.storage.sync.get(DEFAULT_SETTINGS).then(sendResponse);
       return true;

@@ -27,7 +27,8 @@ export async function translateImageWithVision({
   otherVisionUrl = "",
   otherVisionKey = "",
   otherVisionModel = "",
-  targetLang = "ko"
+  targetLang = "ko",
+  onDiagnostic,
 }) {
   const langName = getLanguageName(targetLang);
 
@@ -145,6 +146,7 @@ export async function translateImageWithVision({
   }
 
   const ocrBlocks = parseVisionJsonResponse(rawContent);
+  onDiagnostic?.({ rawBlocks: ocrBlocks, naturalWidth, naturalHeight, mode });
   if (!Array.isArray(ocrBlocks) || ocrBlocks.length === 0) {
     console.warn("[WT Vision] OCR 감지 텍스트 없음");
     return [];
