@@ -44,7 +44,7 @@ export const DEFAULT_SETTINGS = {
   imageStdOtherModel: "qwen2.5-vl",
 
   // ── 2. 고급 번역 (Premium: 이미지 생성 기반 번역) ──
-  imagePremEngine: "gemini",                   // "gemini" | "openai" | "other"
+  imagePremEngine: "gemini", // 합성 전용 (gemini | openai | other); OCR은 imageStdEngine 공유
   // [Gemini 고급]
   imagePremGeminiOcrModel: "gemini-flash-lite-latest",
   imagePremGeminiSynthModel: "gemini-3.1-flash-image",

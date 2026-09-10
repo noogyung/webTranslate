@@ -202,8 +202,8 @@ async function handleStandardMode(img, imageUrl, compressedWidth, compressedHeig
 
 /* ── 고급 모드: Step1 OCR모델 + Step2 합성모델 분리 전달 ────── */
 async function handlePremiumMode(img, imageUrl, compressedWidth, compressedHeight, settings) {
-  const engine = settings.imagePremEngine || "gemini";
-  const tEnd = wtTimer(`고급 번역 [${engine}] (OCR → 이미지 합성)`);
+  const imagePremSynthEngine = settings.imagePremEngine || "gemini";
+  const tEnd = wtTimer(`고급 번역 [${imagePremSynthEngine}] (OCR → 이미지 합성)`);
 
   const result = await sendToBackground({
     action: "translatePremium",
@@ -215,14 +215,17 @@ async function handlePremiumMode(img, imageUrl, compressedWidth, compressedHeigh
     targetLang: settings.targetLang || "ko",
     pageUrl: location.href,
     // v2.0 고급 번역 엔진 정보
-    imagePremEngine: engine,
-    imagePremGeminiOcrModel: settings.imagePremGeminiOcrModel || "",
+    imageStdEngine: settings.imageStdEngine || "free",
+    imagePremSynthEngine,
+    imageStdGeminiModel: settings.imageStdGeminiModel || "",
+    imageStdOpenAIModel: settings.imageStdOpenAIModel || "",
+    imageStdOtherUrl: settings.imageStdOtherUrl || "",
+    imageStdOtherKey: settings.imageStdOtherKey || "",
+    imageStdOtherModel: settings.imageStdOtherModel || "",
     imagePremGeminiSynthModel: settings.imagePremGeminiSynthModel || "",
-    imagePremOpenAIOcrModel: settings.imagePremOpenAIOcrModel || "",
     imagePremOpenAISynthModel: settings.imagePremOpenAISynthModel || "",
     imagePremOtherUrl: settings.imagePremOtherUrl || "",
     imagePremOtherKey: settings.imagePremOtherKey || "",
-    imagePremOtherOcrModel: settings.imagePremOtherOcrModel || "",
     imagePremOtherSynthModel: settings.imagePremOtherSynthModel || "",
     apiKey: settings.geminiApiKey || "",
     openaiApiKey: settings.openaiApiKey || "",
