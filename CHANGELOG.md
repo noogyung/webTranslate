@@ -5,13 +5,10 @@
 
 ## [2.0.0-dev] - In Progress
 
-### Fixed — 2026-09-10
-- 일반·고급 OCR 설정 공통화: 모델 및 Other 서버 설정 전달, Vision 좌표 보존, 합성 전 Offscreen 초기화.
-- 1000px 이하 이미지의 Vision 정규화 좌표 변환 및 빈 OCR 블록 제거 후 번역문 매핑 수정.
-- 요청 언어 유지, Offscreen 생성 재시도, OCR/번역 오류 시 불필요한 합성 방지.
-- 미구현 Other 합성 선택 시 Gemini로 잘못 호출하지 않고 오류 안내.
-- 이미지 번역 회귀 테스트 추가: `node --experimental-vm-modules --test scripts/image-translation.test.js`.
-- 패키징 PowerShell을 인자 배열로 실행하고 프로세스 단위 실행 정책을 지정하여 압축 모듈 로딩 실패 수정.
+### Changed — 2026-09-10
+- Codex의 `9635336` 변경을 되돌리고, `a938276` 기준에서 고급 OCR / Image Gen 엔진 분리만 재작성.
+- 일반 OCR 설정을 고급 Step 1에서 공유하고 고급 엔진은 Step 2 합성에만 사용. 고급 OCR 모델 입력 UI 제거, 기존 storage 키 유지.
+- 일반 모드, Vision 좌표 변환, 스프라이트 패킹·분할·합성, 이미지 생성 API 및 패키징 스크립트는 기준 버전 그대로 유지.
 
 ### Added
 - **이미지 번역 전담 모듈 구조화**: `src/content/image/` (호버 감지, 캔버스 오버레이 렌더러, 다이얼로그)

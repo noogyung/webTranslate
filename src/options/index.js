@@ -84,7 +84,6 @@ const imagePremGeminiSynthModelInput = document.getElementById("imagePremGeminiS
 const imagePremOpenAISynthModelInput = document.getElementById("imagePremOpenAISynthModel");
 const imagePremOtherUrlInput = document.getElementById("imagePremOtherUrl");
 const imagePremOtherKeyInput = document.getElementById("imagePremOtherKey");
-const imagePremOtherOcrModelInput = document.getElementById("imagePremOtherOcrModel");
 const imagePremOtherSynthModelInput = document.getElementById("imagePremOtherSynthModel");
 
 const customApiUrlInput = document.getElementById("customApiUrl");
@@ -169,7 +168,6 @@ async function initialize() {
   if (imagePremOpenAISynthModelInput) imagePremOpenAISynthModelInput.value = settings.imagePremOpenAISynthModel || "gpt-image-2";
   if (imagePremOtherUrlInput) imagePremOtherUrlInput.value = settings.imagePremOtherUrl || "http://localhost:7860";
   if (imagePremOtherKeyInput) imagePremOtherKeyInput.value = settings.imagePremOtherKey || "";
-  if (imagePremOtherOcrModelInput) imagePremOtherOcrModelInput.value = settings.imagePremOtherOcrModel || "qwen2.5-vl";
   if (imagePremOtherSynthModelInput) imagePremOtherSynthModelInput.value = settings.imagePremOtherSynthModel || "sd_inpainting_model";
   updatePremEngineSection(savedPremEngine);
 
@@ -472,7 +470,6 @@ if (saveBtn) {
       imagePremOpenAISynthModel: imagePremOpenAISynthModelInput ? imagePremOpenAISynthModelInput.value.trim() : "gpt-image-2",
       imagePremOtherUrl: imagePremOtherUrlInput ? imagePremOtherUrlInput.value.trim() : "http://localhost:7860",
       imagePremOtherKey: imagePremOtherKeyInput ? imagePremOtherKeyInput.value.trim() : "",
-      imagePremOtherOcrModel: imagePremOtherOcrModelInput ? imagePremOtherOcrModelInput.value.trim() : "qwen2.5-vl",
       imagePremOtherSynthModel: imagePremOtherSynthModelInput ? imagePremOtherSynthModelInput.value.trim() : "sd_inpainting_model",
       // v2.0 커스텀 엔진
       customApiUrl: customApiUrlInput ? customApiUrlInput.value.trim() : "",

@@ -1,19 +1,15 @@
 # WebTranslator v2.0-dev — 이미지 번역 개발 현황
 
-> **브랜치**: `v2.0-dev` | **날짜**: 2026-09-10
+> **브랜치**: `v2.0-dev` | **최신 커밋**: `47bdfaa` | **날짜**: 2026-09-10
 
-## 작업 재개 기록 (2026-09-10)
+## 최신 작업: OCR / Image Gen 분리 재작성
 
-- Antigravity `b75cfb18-6e73-448f-8c83-cdab6e9ea35b`의 Image Translation Feature Plan 계획서 및 대화 로그를 확인했다. 해당 기록은 2026-08-13 초기 기획까지이며, 아래 기존 측정값은 과거 실행 결과다.
-- `a938276`까지 PP-OCR → 번역 → 크롭/스프라이트 → 이미지 합성 파이프라인이 구현되어 있다. 하이브리드 계획서의 승인 대기 표기와 초기 설계의 512px 목표는 현재 구현 상태와 다르다. 현재 입력 압축은 긴 축 1024px이다.
-- 남아 있던 OCR 설정 공통화 변경을 이어서, 고급 모드에 `imageStd*` 설정 전체를 전달하고 Gemini/GPT/Other Vision의 `eraseBox`를 크롭 좌표로 유지한다. Other OCR 서버도 공통 경로에 연결했다.
-- 1000px 이하 Vision 좌표 변환, 빈 OCR 텍스트 제거 후 인덱스 일치, 요청 언어 유지, Offscreen 초기화 및 실패 후 재시도를 수정했다.
-- OCR/텍스트 번역 예외는 합성 호출 없이 전달한다. Free OCR이 빈 결과를 반환하는 경우 기존 전체 이미지 폴백은 유지한다.
-- Other 이미지 합성은 미구현이다. 기존처럼 Gemini로 잘못 전달하지 않고 명시적 오류를 반환한다.
-- 검증: `node --experimental-vm-modules --test scripts/image-translation.test.js` (API 및 Chrome 경계 모의 실행). 실제 브라우저 렌더링, API 번역 품질과 시간은 별도 검증이 필요하다.
-- 남은 항목: GPT Vision 빈 응답 원인 확인(Responses API 전환 필요성은 아직 가설), Other 합성 서버 구현, 실제 이미지의 위치·리사이즈·토글 및 합성 품질 검증.
-
-아래는 이전 개발 기록이며, 미해결 상태는 위 재개 기록을 우선한다.
+- 사용자의 롤백 요청에 따라 Codex 커밋 `9635336`을 되돌리고 `a938276`을 기준으로 라우팅·UI만 재작성했다. 아래 본문은 과거 개발 기록이다.
+- `imageStdEngine` 및 일반 OCR 모델 설정을 고급 Step 1에서 공유한다. Step 2는 `imagePremEngine`에 저장된 합성 엔진을 사용한다.
+- content 메시지에서는 `imagePremSynthEngine`으로 의미를 명확히 하고, background는 구 메시지 키 `imagePremEngine`도 수용한다. 저장 키는 변경하지 않는다.
+- 고급 Gemini/GPT/Other의 OCR 모델 입력 UI만 제거하고, 기존 모델 storage 키와 값은 보존한다.
+- 일반 번역 코드, Vision 좌표 변환, 스프라이트 패킹·분할·합성 및 이미지 생성 API는 `a938276`과 동일하게 유지했다.
+- 모의 검증: PP-OCR/Gemini/GPT OCR × Gemini/GPT Image Gen 6조합, 구 메시지 호환성, 기준 코드 동일성 검사 통과. 실제 API 및 첨부 이미지의 시각적 재검증은 수행하지 않았다.
 
 ---
 

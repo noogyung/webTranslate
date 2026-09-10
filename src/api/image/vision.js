@@ -207,8 +207,6 @@ function parseVisionJsonResponse(rawText) {
  */
 export function normalizeBox(rawBox, naturalWidth, naturalHeight, isGeminiOrder = true) {
   if (!rawBox || !Array.isArray(rawBox) || rawBox.length !== 4) return null;
-  if (!rawBox.every(Number.isFinite)) return null;
-  if (!(naturalWidth > 0) || !(naturalHeight > 0)) return null;
 
   let c_xmin, c_ymin, c_xmax, c_ymax;
   if (isGeminiOrder) {
@@ -219,12 +217,14 @@ export function normalizeBox(rawBox, naturalWidth, naturalHeight, isGeminiOrder 
     [c_xmin, c_ymin, c_xmax, c_ymax] = rawBox;
   }
 
-  // 모든 Vision 프롬프트의 좌표 계약은 이미지 크기와 무관하게 0~1000이다.
-  if (c_xmax <= c_xmin || c_ymax <= c_ymin) return null;
-  const px_x1 = (c_xmin / 1000) * naturalWidth;
-  const px_y1 = (c_ymin / 1000) * naturalHeight;
-  const px_x2 = (c_xmax / 1000) * naturalWidth;
-  const px_y2 = (c_ymax / 1000) * naturalHeight;
+  // 0~1000 정규화 좌표 자동 감지
+  const maxCoord = Math.max(c_xmin, c_ymin, c_xmax, c_ymax);
+  const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
+
+  const px_x1 = isNorm ? (c_xmin / 1000) * naturalWidth : c_xmin;
+  const px_y1 = isNorm ? (c_ymin / 1000) * naturalHeight : c_ymin;
+  const px_x2 = isNorm ? (c_xmax / 1000) * naturalWidth : c_xmax;
+  const px_y2 = isNorm ? (c_ymax / 1000) * naturalHeight : c_ymax;
 
   const PAD = 2;
   const x = Math.max(0, Math.round(px_x1) - PAD);
@@ -233,5 +233,5 @@ export function normalizeBox(rawBox, naturalWidth, naturalHeight, isGeminiOrder 
   const y2 = Math.min(naturalHeight || Infinity, Math.round(px_y2) + PAD);
   const w = x2 - x, h = y2 - y;
   if (w <= 0 || h <= 0) return null;
-  return { x, y, width: w, height: h, _wasNormalized: true };
+  return { x, y, width: w, height: h, _wasNormalized: isNorm };
 }
