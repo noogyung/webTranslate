@@ -383,7 +383,7 @@
       <!-- ── 일반 번역 엔진 4종 ── -->
       <div style="margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
         <div style="font-size: 13px; color: #a6e3a1; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
-          🔍 일반 번역 (OCR → 텍스트 오버레이) 엔진
+          🔍 OCR 엔진 (텍스트 인식 — 일반/고급 공통)
         </div>
 
         <!-- 일반 엔진 라디오 -->
@@ -491,7 +491,7 @@
       <!-- ── 고급 번역 엔진 3종 ── -->
       <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
         <div style="font-size: 13px; color: #89b4fa; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.03em;">
-          ⚡ 고급 번역 (AI 이미지 합성 — 512px 고속 완주) 엔진
+          ⚡ 이미지 합성 엔진 (고급 번역 전용 — AI 이미지 생성)
         </div>
 
         <!-- 고급 엔진 라디오 -->
@@ -513,18 +513,7 @@
         <!-- 고급 Gemini -->
         <div id="premGeminiSection">
           <div class="field-row">
-            <label class="field-label" for="imagePremGeminiOcrModel">Step 1 OCR 모델 (텍스트 추출)</label>
-            <input type="text" id="imagePremGeminiOcrModel" class="text-input"
-              list="premGeminiOcrModelList"
-              placeholder="gemini-flash-lite-latest"
-              spellcheck="false" />
-            <datalist id="premGeminiOcrModelList">
-              <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (추천 - 초고속)</option>
-              <option value="gemini-flash-latest">gemini-flash-latest</option>
-            </datalist>
-          </div>
-          <div class="field-row" style="margin-top: 10px;">
-            <label class="field-label" for="imagePremGeminiSynthModel">Step 2 합성 모델 (이미지 생성)</label>
+            <label class="field-label" for="imagePremGeminiSynthModel">이미지 생성 모델</label>
             <input type="text" id="imagePremGeminiSynthModel" class="text-input"
               list="premGeminiSynthModelList"
               placeholder="gemini-3.1-flash-image"
@@ -536,25 +525,15 @@
           </div>
           <p class="field-hint" style="margin-top: 6px;">
             💡 Gemini API Key는 상단 <em>번역 모드 → Gemini AI</em> 섹션의 키를 그대로 사용합니다.<br>
-            ⚠️ 이미지 생성 API는 <strong>무료 티어 미지원</strong> — Google AI Studio에서 결제 활성화 필요
+            ⚠️ 이미지 생성 API는 <strong>무료 티어 미지원</strong> — Google AI Studio에서 결제 활성화 필요<br>
+            📌 OCR 엔진은 위 <em>OCR 엔진</em> 섹션에서 선택한 엔진을 공통으로 사용합니다.
           </p>
         </div>
 
         <!-- 고급 GPT -->
         <div id="premOpenAISection" style="display: none;">
           <div class="field-row">
-            <label class="field-label" for="imagePremOpenAIOcrModel">Step 1 OCR 모델 (텍스트 추출)</label>
-            <input type="text" id="imagePremOpenAIOcrModel" class="text-input"
-              list="premOpenAIOcrModelList"
-              placeholder="gpt-5.6-luna"
-              spellcheck="false" />
-            <datalist id="premOpenAIOcrModelList">
-              <option value="gpt-5.6-luna">gpt-5.6-luna (추천 - 2026 최신 경량)</option>
-              <option value="gpt-4o-mini">gpt-4o-mini</option>
-            </datalist>
-          </div>
-          <div class="field-row" style="margin-top: 10px;">
-            <label class="field-label" for="imagePremOpenAISynthModel">Step 2 합성 모델 (이미지 생성)</label>
+            <label class="field-label" for="imagePremOpenAISynthModel">이미지 생성 모델</label>
             <input type="text" id="imagePremOpenAISynthModel" class="text-input"
               list="premOpenAISynthModelList"
               placeholder="gpt-image-2"
@@ -564,7 +543,8 @@
             </datalist>
           </div>
           <p class="field-hint" style="margin-top: 6px;">
-            💡 OpenAI API Key는 상단 <em>번역 모드 → ChatGPT API</em> 섹션의 키를 그대로 사용합니다.
+            💡 OpenAI API Key는 상단 <em>번역 모드 → ChatGPT API</em> 섹션의 키를 그대로 사용합니다.<br>
+            📌 OCR 엔진은 위 <em>OCR 엔진</em> 섹션에서 선택한 엔진을 공통으로 사용합니다.
           </p>
         </div>
 

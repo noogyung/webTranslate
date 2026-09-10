@@ -5,6 +5,14 @@
 
 ## [2.0.0-dev] - In Progress
 
+### Fixed — 2026-09-10
+- 일반·고급 OCR 설정 공통화: 모델 및 Other 서버 설정 전달, Vision 좌표 보존, 합성 전 Offscreen 초기화.
+- 1000px 이하 이미지의 Vision 정규화 좌표 변환 및 빈 OCR 블록 제거 후 번역문 매핑 수정.
+- 요청 언어 유지, Offscreen 생성 재시도, OCR/번역 오류 시 불필요한 합성 방지.
+- 미구현 Other 합성 선택 시 Gemini로 잘못 호출하지 않고 오류 안내.
+- 이미지 번역 회귀 테스트 추가: `node --experimental-vm-modules --test scripts/image-translation.test.js`.
+- 패키징 PowerShell을 인자 배열로 실행하고 프로세스 단위 실행 정책을 지정하여 압축 모듈 로딩 실패 수정.
+
 ### Added
 - **이미지 번역 전담 모듈 구조화**: `src/content/image/` (호버 감지, 캔버스 오버레이 렌더러, 다이얼로그)
 - **Git 자동 동기화 워크플로우**: 버전 기반 브랜칭 및 커밋/푸시 규칙 체계화 (`.agents/AGENTS.md`, `scripts/git-sync.ps1`)

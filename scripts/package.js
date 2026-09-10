@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -93,8 +93,9 @@ console.log(`[Package] Zip 파일 압축 생성 중: ${zipName}`);
 
 try {
   // PowerShell Compress-Archive를 사용하여 압축 (Windows 환경 기본 내장)
-  const psCommand = `powershell -Command "Compress-Archive -Path '${tempBuildDir}\\*' -DestinationPath '${zipPath}' -Force"`;
-  execSync(psCommand, { stdio: "inherit" });
+  const quotePS = value => `'${value.replace(/'/g, "''")}'`;
+  const psCommand = `Compress-Archive -Path ${quotePS(path.join(tempBuildDir, '*'))} -DestinationPath ${quotePS(zipPath)} -Force -ErrorAction Stop`;
+  execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psCommand], { stdio: "inherit" });
 
   const zipStats = fs.statSync(zipPath);
   const zipSizeKB = (zipStats.size / 1024).toFixed(2);

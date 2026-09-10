@@ -215,6 +215,13 @@ async function handlePremiumMode(img, imageUrl, compressedWidth, compressedHeigh
     targetLang: settings.targetLang || "ko",
     pageUrl: location.href,
     // v2.0 고급 번역 엔진 정보
+    imageStdEngine: settings.imageStdEngine || "free",
+    imageStdGeminiModel: settings.imageStdGeminiModel || "",
+    imageStdOpenAIModel: settings.imageStdOpenAIModel || "",
+    imageStdOtherType: settings.imageStdOtherType || "ocr_server",
+    imageStdOtherUrl: settings.imageStdOtherUrl || "",
+    imageStdOtherKey: settings.imageStdOtherKey || "",
+    imageStdOtherModel: settings.imageStdOtherModel || "",
     imagePremEngine: engine,
     imagePremGeminiOcrModel: settings.imagePremGeminiOcrModel || "",
     imagePremGeminiSynthModel: settings.imagePremGeminiSynthModel || "",

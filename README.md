@@ -11,8 +11,10 @@
 * **마우스 호버 기반 이미지 번역**
   * 웹페이지 내 이미지에 마우스를 올리면 우측 상단에 `[번역]` 플로팅 버튼 자동 노출.
   * 번역 완료 후 원본 이미지와 번역본을 자유롭게 전환하는 `[원본 보기]` / `[번역 보기]` 원터치 토글 지원.
-* **Gemini 2.0 Flash Multimodal Native 비전 파이프라인**
-  * 무거운 클라이언트 WASM/OCR 모델을 배제하고 Gemini 비전 API를 활용한 초경량·고정밀 텍스트 추출 및 번역.
+* **일반·고급 공통 OCR 설정**
+  * Free(PP-OCRv6 WASM), Gemini, GPT, Other(OCR 서버 또는 Vision API)를 선택하고 모델과 서버를 설정합니다.
+  * 일반 모드는 Canvas 텍스트 오버레이, 고급 모드는 OCR 영역을 스프라이트로 묶어 Gemini/GPT 이미지 합성 후 원래 위치에 복원합니다.
+  * 고급 합성 모델은 OCR 모델과 별도로 선택합니다. Other 이미지 합성 서버는 아직 미구현이며 선택 시 안내 오류를 표시합니다.
 * **DPR / CSS Transform 보정 정밀 Canvas 오버레이**
   * 브라우저 DPR(Device Pixel Ratio), `object-fit`, `transform: scale()`을 정밀 계산하여 이미지 내 글자 위치를 1:1 완벽 정렬.
 
