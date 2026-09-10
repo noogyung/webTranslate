@@ -251,7 +251,6 @@ export async function handleStandardTranslation(message, sender) {
 
 export async function handlePremiumTranslation(message, sender) {
   const T = { start: Date.now() };
-  let diagnosticOcr;
   let base64DataUrl = message.imageUrl;
   if (!base64DataUrl.startsWith("data:")) {
     base64DataUrl = await fetchImageAsBase64(
@@ -280,11 +279,9 @@ export async function handlePremiumTranslation(message, sender) {
         imageDataUrl: base64DataUrl,
         lang: guessSourceLang(message.targetLang),
       });
-      if (message.diagnostic) diagnosticOcr = { rawBlocks: ocrResult?.blocks, mode: "free" };
       T.ocr1 = Date.now();
 
       if (!ocrResult?.success || !ocrResult.blocks?.length) {
-        if (message.diagnostic) throw new Error("OCR 결과가 없습니다. 진단에서는 합성 폴백을 실행하지 않습니다.");
         console.warn("[WT Premium Hybrid] PP-OCR 미검출 → 폴백");
         return await handlePremiumFallback(base64DataUrl, synthEngine, message);
       }
@@ -313,7 +310,6 @@ export async function handlePremiumTranslation(message, sender) {
       }
       console.log(`[WT Premium Hybrid] Step 1b LLM번역: ${translationPairs.length}개 쌍 (${T.llm1 - T.llm0}ms)`);
     } catch (ocrErr) {
-      if (message.diagnostic) throw ocrErr;
       console.warn("[WT Premium Hybrid] PP-OCR 실패 → 폴백:", ocrErr.message);
       return await handlePremiumFallback(base64DataUrl, synthEngine, message);
     }
@@ -323,7 +319,6 @@ export async function handlePremiumTranslation(message, sender) {
       await ensureOffscreenDocument();
       const visionMode = ocrEngine === "openai" ? "openai" : "gemini";
       const ocrBlocks = await translateImageWithVision({
-        onDiagnostic: message.diagnostic ? data => { diagnosticOcr = data; } : undefined,
         base64DataUrl,
         naturalWidth: message.compressedWidth || message.naturalWidth || 0,
         naturalHeight: message.compressedHeight || message.naturalHeight || 0,
@@ -345,12 +340,10 @@ export async function handlePremiumTranslation(message, sender) {
       console.log(`[WT Premium Hybrid] Step 1 Vision [${ocrEngine}]: ${translationPairs.length}개 쌍 (${T.ocr1 - T.ocr0}ms)`);
 
       if (!translationPairs.length) {
-        if (message.diagnostic) throw new Error("OCR 결과가 없습니다.");
         console.warn("[WT Premium Hybrid] Vision OCR 미검출 → 폴백");
         return await handlePremiumFallback(base64DataUrl, synthEngine, message);
       }
     } catch (visionErr) {
-      if (message.diagnostic) throw visionErr;
       console.warn("[WT Premium Hybrid] Vision OCR 실패 → 폴백:", visionErr.message);
       return await handlePremiumFallback(base64DataUrl, synthEngine, message);
     }
@@ -372,26 +365,6 @@ export async function handlePremiumTranslation(message, sender) {
   });
   if (!spriteResult?.success) throw new Error("크롭→스프라이트 실패: " + (spriteResult?.error || "unknown"));
   T.sprite1 = Date.now();
-  if (message.diagnostic) {
-    const roundtrip = await chrome.runtime.sendMessage({
-      action: "splitAndComposite", translatedSpriteUrl: spriteResult.dataUrl,
-      layout: spriteResult.layout, cropBboxes: spriteResult.cropBboxes,
-      originalDataUrl: base64DataUrl,
-    });
-    if (!roundtrip?.success) throw new Error(roundtrip?.error || "왕복 검사 실패");
-    return {
-      version: 1, id: crypto.randomUUID(), createdAt: new Date().toISOString(),
-      ocrEngine, synthEngine, targetLang: message.targetLang || "ko",
-      ocrModel: ocrEngine === "free" ? "PP-OCR" : ocrEngine === "openai" ? message.imageStdOpenAIModel : message.imageStdGeminiModel,
-      synthModel: synthEngine === "openai" ? message.imagePremOpenAISynthModel || "gpt-image-2" : message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
-      naturalWidth: message.naturalWidth, naturalHeight: message.naturalHeight,
-      inputWidth: message.compressedWidth, inputHeight: message.compressedHeight,
-      originalDataUrl: base64DataUrl, diagnosticOcr, translationPairs,
-      sprite: { dataUrl: spriteResult.dataUrl, layout: spriteResult.layout, cropBboxes: spriteResult.cropBboxes, apiSize: spriteResult.apiSize },
-      roundtripDataUrl: roundtrip.dataUrl,
-      timings: { ocrAndTranslation: T.ocr1 - T.ocr0 + T.llm1 - T.llm0, packing: T.sprite1 - T.sprite0 },
-    };
-  }
   console.log(`[WT Premium Hybrid] 크롭→스프라이트: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px (${T.sprite1 - T.sprite0}ms)`);
 
   // 2b. 스프라이트 시트 1회 API 호출
@@ -441,30 +414,6 @@ export async function handlePremiumTranslation(message, sender) {
 
   await incrementImageCount("premium");
   return compositeResult.dataUrl;
-}
-
-// 진단 페이지에서만 호출: OCR/패킹을 반복하지 않고 저장한 입력을 사용한다.
-export async function replayImageDiagnostic(message) {
-  const r = message.report;
-  if (r?.version !== 1 || !r.sprite?.layout || !Array.isArray(r.translationPairs)) throw new Error("진단 자료 형식 오류");
-  await ensureOffscreenDocument();
-  let translatedSpriteUrl = r.translatedSpriteUrl;
-  const start = Date.now();
-  if (message.generate) {
-    const settings = await getSettings();
-    const fn = r.synthEngine === "openai" ? translateSpriteOpenAI : translateSpriteGemini;
-    translatedSpriteUrl = await fn({
-      base64DataUrl: r.sprite.dataUrl, apiKey: r.synthEngine === "openai" ? settings.openaiApiKey : settings.geminiApiKey,
-      model: r.synthModel, translationPairs: r.translationPairs, targetLang: r.targetLang, apiSize: r.sprite.apiSize,
-    });
-  }
-  if (!translatedSpriteUrl) throw new Error("저장된 합성 스프라이트가 없습니다.");
-  const generationMs = message.generate ? Date.now() - start : null;
-  const composite = await chrome.runtime.sendMessage({
-    action: "splitAndComposite", translatedSpriteUrl, layout: r.sprite.layout,
-    cropBboxes: r.sprite.cropBboxes, originalDataUrl: r.originalDataUrl,
-  });
-  return { translatedSpriteUrl, finalDataUrl: composite.dataUrl || null, generationMs, compositeError: composite.success ? null : composite.error || "합성 실패" };
 }
 
 /**
