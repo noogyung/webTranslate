@@ -75,21 +75,24 @@ export function buildCropPrompt(originalText, translatedText, targetLang) {
 function buildSpritePrompt(translationPairs, targetLang) {
   const langName = getLanguageName(targetLang);
   let prompt = `You are a professional manga/webtoon image editor.\n\n`;
-  prompt += `This image contains ${translationPairs.length} text regions stacked vertically, separated by gray lines.\n`;
+  prompt += `This image contains ${translationPairs.length} text regions stacked vertically, separated by dark gray lines.\n`;
   prompt += `Replace the text in each region with its ${langName} translation, from top to bottom:\n\n`;
 
   translationPairs.forEach((pair, i) => {
     const orig = pair.original.replace(/\n/g, "\\n");
     const trans = pair.translated.replace(/\n/g, "\\n");
-    prompt += `[${i + 1}] "${orig}" → "${trans}"\n`;
+    const size = pair.regionW && pair.regionH ? ` (region size: ${pair.regionW}x${pair.regionH}px)` : "";
+    prompt += `[${i + 1}]${size} "${orig}" → "${trans}"\n`;
   });
 
   prompt +=
     `\nRULES:\n` +
-    `- PRESERVE backgrounds, speech bubbles, and art in each region EXACTLY.\n` +
-    `- Match the original font style, size, weight, and color.\n` +
-    `- Each numbered region must have ONLY its text replaced.\n` +
-    `- Do NOT alter the gray separator lines between regions.\n` +
+    `- REMOVE the original text completely (no leftover characters or fragments), then draw the translation in its place.\n` +
+    `- The translation MUST fit entirely inside its own region. Reduce the font size or add line breaks rather than letting any character be cut off or overflow.\n` +
+    `- PRESERVE backgrounds, speech bubbles, screentones, and art in each region EXACTLY; keep the region's outer edge pixels unchanged.\n` +
+    `- Match the original font style, weight, and color.\n` +
+    `- Each numbered region must have ONLY its text replaced. Never move content across regions.\n` +
+    `- Do NOT alter the gray separator lines or the light gray empty areas.\n` +
     `- Do NOT add watermarks, borders, or artifacts.\n` +
     `- Output ONLY the modified image with the same dimensions.`;
 

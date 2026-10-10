@@ -249,6 +249,59 @@ export async function handleStandardTranslation(message, sender) {
   return result;
 }
 
+/**
+ * 겹치는 번역 쌍 병합 (Vision OCR의 줄 단위/말풍선 단위 중복 박스 정리).
+ * - 한 박스가 다른 박스에 거의 포함: 원문이 더 긴 쪽만 유지
+ * - 부분 겹침(작은 쪽 면적의 30% 이상): 합집합 박스 + 텍스트 연결
+ * 더 이상 병합할 쌍이 없을 때까지 반복.
+ */
+function mergeOverlappingPairs(pairs) {
+  const list = pairs.map(p => ({ ...p, bbox: { x: p.bbox.x, y: p.bbox.y, width: p.bbox.width, height: p.bbox.height } }));
+
+  const overlapRatio = (a, b) => {
+    const ix = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+    const iy = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    const inter = ix * iy;
+    const minArea = Math.min(a.width * a.height, b.width * b.height) || 1;
+    return inter / minArea;
+  };
+
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer:
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const ratio = overlapRatio(list[i].bbox, list[j].bbox);
+        if (ratio < 0.3) continue;
+
+        if (ratio >= 0.8) {
+          // 포함 관계: 원문이 더 긴 쪽 유지
+          const keep = (list[i].original.length >= list[j].original.length) ? i : j;
+          const drop = keep === i ? j : i;
+          list.splice(drop, 1);
+        } else {
+          // 부분 겹침: 합집합
+          const a = list[i], b = list[j];
+          const x1 = Math.min(a.bbox.x, b.bbox.x);
+          const y1 = Math.min(a.bbox.y, b.bbox.y);
+          const x2 = Math.max(a.bbox.x + a.bbox.width, b.bbox.x + b.bbox.width);
+          const y2 = Math.max(a.bbox.y + a.bbox.height, b.bbox.y + b.bbox.height);
+          list[i] = {
+            original: `${a.original}\n${b.original}`,
+            translated: `${a.translated}\n${b.translated}`,
+            bbox: { x: x1, y: y1, width: x2 - x1, height: y2 - y1 },
+          };
+          list.splice(j, 1);
+        }
+        merged = true;
+        break outer;
+      }
+    }
+  }
+  return list;
+}
+
 export async function handlePremiumTranslation(message, sender) {
   const T = { start: Date.now() };
   let base64DataUrl = message.imageUrl;
@@ -334,8 +387,13 @@ export async function handlePremiumTranslation(message, sender) {
       T.llm1 = T.ocr1;
 
       translationPairs = ocrBlocks
-        .filter(b => b.originalText?.trim() && b.translatedText?.trim())
+        .filter(b => b.originalText?.trim() && b.translatedText?.trim() && b.eraseBox)
         .map(b => ({ original: b.originalText, translated: b.translatedText, bbox: b.eraseBox }));
+      const beforeMerge = translationPairs.length;
+      translationPairs = mergeOverlappingPairs(translationPairs);
+      if (translationPairs.length !== beforeMerge) {
+        console.log(`[WT Premium Hybrid] 겹침 병합: ${beforeMerge} → ${translationPairs.length}개`);
+      }
 
       console.log(`[WT Premium Hybrid] Step 1 Vision [${ocrEngine}]: ${translationPairs.length}개 쌍 (${T.ocr1 - T.ocr0}ms)`);
 
@@ -361,11 +419,18 @@ export async function handlePremiumTranslation(message, sender) {
     imageDataUrl: base64DataUrl,
     boxes,
     padding: 15,
-    gap: 4,
+    gap: 16,
   });
   if (!spriteResult?.success) throw new Error("크롭→스프라이트 실패: " + (spriteResult?.error || "unknown"));
   T.sprite1 = Date.now();
   console.log(`[WT Premium Hybrid] 크롭→스프라이트: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px (${T.sprite1 - T.sprite0}ms)`);
+
+  // 프롬프트용: 영역별 실제 스프라이트 내 크기(px) 부착
+  translationPairs = translationPairs.map((p, i) => ({
+    ...p,
+    regionW: spriteResult.layout.regions[i]?.width,
+    regionH: spriteResult.layout.regions[i]?.height,
+  }));
 
   // 2b. 스프라이트 시트 1회 API 호출
   T.api0 = Date.now();

@@ -873,21 +873,49 @@ async function splitAndComposite(translatedSpriteUrl, layout, cropBboxes, origin
 
   // 원본 로드 + 합성 캔버스
   const bgImg = await loadImageBitmap(originalDataUrl);
-  const canvas = new OffscreenCanvas(bgImg.width, bgImg.height);
+  const imgW = bgImg.width, imgH = bgImg.height;
+  const canvas = new OffscreenCanvas(imgW, imgH);
   const ctx = canvas.getContext("2d");
   ctx.drawImage(bgImg, 0, 0);
   bgImg.close();
 
-  // 각 크롭 분할 → 즉시 합성 (중간 base64 없음)
+  const FEATHER = 12;
+
+  // 각 크롭 분할 → 가장자리 페더링 후 합성 (중간 base64 없음)
   for (let i = 0; i < layout.regions.length; i++) {
     const r = layout.regions[i];
     const cy = Math.round(r.y * sy);
     const cw = Math.round(r.width * sx);
     const ch = Math.round(r.height * sy);
     const bbox = cropBboxes[i];
+    const bw = bbox.width, bh = bbox.height;
+    const f = Math.max(0, Math.min(FEATHER, Math.floor(Math.min(bw, bh) / 4)));
 
-    // 스프라이트에서 크롭 영역 직접 원본 위에 그리기
-    ctx.drawImage(spriteImg, 0, cy, cw, ch, bbox.x, bbox.y, bbox.width, bbox.height);
+    if (f === 0) {
+      ctx.drawImage(spriteImg, 0, cy, cw, ch, bbox.x, bbox.y, bw, bh);
+      continue;
+    }
+
+    // 조각을 임시 캔버스에 원본 박스 크기로 그림
+    const tmp = new OffscreenCanvas(bw, bh);
+    const tctx = tmp.getContext("2d");
+    tctx.drawImage(spriteImg, 0, cy, cw, ch, 0, 0, bw, bh);
+
+    // 알파 마스크: 안쪽 사각형을 블러. 이미지 외곽에 닿는 변은 바깥으로 확장해 페더링 제외
+    const atL = bbox.x <= 0, atT = bbox.y <= 0;
+    const atR = bbox.x + bw >= imgW, atB = bbox.y + bh >= imgH;
+    const mask = new OffscreenCanvas(bw, bh);
+    const mctx = mask.getContext("2d");
+    const mx0 = atL ? -f * 3 : f, my0 = atT ? -f * 3 : f;
+    const mx1 = atR ? bw + f * 3 : bw - f, my1 = atB ? bh + f * 3 : bh - f;
+    mctx.filter = `blur(${Math.max(1, Math.round(f / 2))}px)`;
+    mctx.fillStyle = "#000";
+    mctx.fillRect(mx0, my0, mx1 - mx0, my1 - my0);
+
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.drawImage(mask, 0, 0);
+
+    ctx.drawImage(tmp, bbox.x, bbox.y);
   }
   spriteImg.close();
 
