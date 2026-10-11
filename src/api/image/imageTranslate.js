@@ -100,6 +100,29 @@ function buildSpritePrompt(translationPairs, targetLang) {
 }
 
 /**
+ * Gemini 이미지 응답에서 이미지 추출 (inlineData / inline_data 모두 지원).
+ * 실패 시 원인(차단, 텍스트 응답 등)을 에러 메시지에 포함.
+ */
+function extractGeminiImage(data, label) {
+  const cand = data.candidates?.[0];
+  const parts = cand?.content?.parts || [];
+  for (const p of parts) {
+    const inl = p.inlineData || p.inline_data;
+    if (inl?.data) {
+      const mime = inl.mimeType || inl.mime_type || "image/png";
+      return `data:${mime};base64,${inl.data}`;
+    }
+  }
+  const reasons = [];
+  if (data.promptFeedback?.blockReason) reasons.push(`blockReason=${data.promptFeedback.blockReason}`);
+  if (cand?.finishReason) reasons.push(`finishReason=${cand.finishReason}`);
+  const text = parts.map(p => p.text).filter(Boolean).join(" ").slice(0, 200);
+  if (text) reasons.push(`text="${text}"`);
+  console.warn(`[WT ${label}] 이미지 미반환 응답:`, JSON.stringify(data).slice(0, 800));
+  throw new Error(`${label}: 이미지 미반환${reasons.length ? " (" + reasons.join(", ") + ")" : ""}`);
+}
+
+/**
  * 스프라이트 시트 Gemini Image-to-Image 번역 (1회 API 호출).
  */
 export async function translateSpriteGemini({ base64DataUrl, apiKey, model, translationPairs, targetLang }) {
@@ -133,9 +156,7 @@ export async function translateSpriteGemini({ base64DataUrl, apiKey, model, tran
   }
 
   const data = await response.json();
-  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inline_data);
-  if (!imagePart) throw new Error("Gemini Sprite API: 이미지 미반환");
-  return `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+  return extractGeminiImage(data, "Gemini Sprite API");
 }
 
 /**
