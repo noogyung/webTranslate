@@ -45,6 +45,7 @@ export const DEFAULT_SETTINGS = {
 
   // ── 2. 고급 번역 (Premium: 이미지 생성 기반 번역) ──
   imagePremEngine: "gemini", // 합성 전용 (gemini | openai | other); OCR은 imageStdEngine 공유
+  imagePremSynthMode: "annotated", // "annotated" (번호표 전체 이미지) | "crop" (크롭 개별 호출)
   // [Gemini 고급]
   imagePremGeminiOcrModel: "gemini-flash-lite-latest",
   imagePremGeminiSynthModel: "gemini-3.1-flash-image",

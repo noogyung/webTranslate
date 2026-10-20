@@ -1,5 +1,5 @@
 import { translateImageWithVision, locateBoundingBoxesWithVision } from "../api/image/vision.js";
-import { translatePremiumGemini, translatePremiumOpenAI, translateCropGemini, translateCropOpenAI, translateSpriteGemini, translateSpriteOpenAI, incrementImageCount } from "../api/image/imageTranslate.js";
+import { translatePremiumGemini, translatePremiumOpenAI, translateCropGemini, translateCropOpenAI, translateSpriteGemini, translateSpriteOpenAI, buildCropPrompt, buildAnnotatedPrompt, incrementImageCount } from "../api/image/imageTranslate.js";
 import { runCustomOcrServer } from "../api/image/customOcrServer.js";
 import { translateTextArray } from "./translationService.js";
 import { cleanOcrTextForTranslation } from "../utils/cleaner.js";
@@ -276,10 +276,22 @@ function mergeOverlappingPairs(pairs) {
         if (ratio < 0.3) continue;
 
         if (ratio >= 0.8) {
-          // 포함 관계: 원문이 더 긴 쪽 유지
-          const keep = (list[i].original.length >= list[j].original.length) ? i : j;
-          const drop = keep === i ? j : i;
-          list.splice(drop, 1);
+          // 포함 관계: 면적이 큰 쪽을 기준 박스로 유지.
+          // 작은 쪽 원문이 큰 쪽 원문에 이미 포함되면 제거, 아니면 텍스트를 이어 붙여
+          // "박스 안 이미지 = 원문/번역 텍스트"가 항상 대응되도록 한다.
+          const areaI = list[i].bbox.width * list[i].bbox.height;
+          const areaJ = list[j].bbox.width * list[j].bbox.height;
+          const big = areaI >= areaJ ? i : j;
+          const small = big === i ? j : i;
+          const norm = (s) => String(s).replace(/\s+/g, "");
+          if (!norm(list[big].original).includes(norm(list[small].original))) {
+            list[big] = {
+              ...list[big],
+              original: `${list[big].original}\n${list[small].original}`,
+              translated: `${list[big].translated}\n${list[small].translated}`,
+            };
+          }
+          list.splice(small, 1);
         } else {
           // 부분 겹침: 합집합
           const a = list[i], b = list[j];
@@ -408,73 +420,94 @@ export async function handlePremiumTranslation(message, sender) {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // Step 2: 크롭→스프라이트→API→분할→합성 (통합 메시지)
+  // Step 2: 이미지 합성 (synthMode: crop = 박스별 개별 호출 / annotated = 번호표 전체 이미지)
   // ══════════════════════════════════════════════════════════════
-
-  // 2a. 크롭 + 스프라이트 빌드 (1회 메시지)
-  T.sprite0 = Date.now();
+  const synthMode = message.imagePremSynthMode === "crop" ? "crop" : "annotated";
+  const lang = message.targetLang || "ko";
   const boxes = translationPairs.map(p => p.bbox);
-  const spriteResult = await chrome.runtime.sendMessage({
-    action: "cropAndBuildSprite",
+
+  // 2a. 조각 준비 (오프스크린: 원본 복사 → 자르기/번호표 → 표준 크기 패딩)
+  T.sprite0 = Date.now();
+  const prep = await chrome.runtime.sendMessage({
+    action: "prepareSlices",
     imageDataUrl: base64DataUrl,
+    mode: synthMode,
     boxes,
     padding: 15,
-    gap: 16,
+    padToStandard: synthEngine === "openai",
   });
-  if (!spriteResult?.success) throw new Error("크롭→스프라이트 실패: " + (spriteResult?.error || "unknown"));
+  if (!prep?.success) throw new Error("조각 준비 실패: " + (prep?.error || "unknown"));
   T.sprite1 = Date.now();
-  console.log(`[WT Premium Hybrid] 크롭→스프라이트: ${spriteResult.layout.spriteWidth}×${spriteResult.layout.spriteHeight}px (${T.sprite1 - T.sprite0}ms)`);
+  console.log(`[WT Premium Hybrid] 조각 준비 [${synthMode}/${synthEngine}]: ${prep.slices.length}개 (${T.sprite1 - T.sprite0}ms)`);
 
-  // 프롬프트용: 영역별 실제 스프라이트 내 크기(px) 부착
-  translationPairs = translationPairs.map((p, i) => ({
-    ...p,
-    regionW: spriteResult.layout.regions[i]?.width,
-    regionH: spriteResult.layout.regions[i]?.height,
-  }));
-
-  // 2b. 스프라이트 시트 1회 API 호출
+  // 2b. 조각별 이미지 생성 API 호출 (동시 3개)
   T.api0 = Date.now();
-  let translatedSpriteUrl;
-  if (synthEngine === "openai") {
-    translatedSpriteUrl = await translateSpriteOpenAI({
-      base64DataUrl: spriteResult.dataUrl,
-      apiKey: message.openaiApiKey || "",
-      model: message.imagePremOpenAISynthModel || "gpt-image-2",
-      translationPairs,
-      targetLang: message.targetLang || "ko",
-      apiSize: spriteResult.apiSize,
-    });
-  } else {
-    translatedSpriteUrl = await translateSpriteGemini({
-      base64DataUrl: spriteResult.dataUrl,
+  const callOne = async (slice, idx) => {
+    const pairs = slice.boxIdx.map(i => ({
+      ...translationPairs[i],
+      regionW: translationPairs[i].bbox.width,
+      regionH: translationPairs[i].bbox.height,
+    }));
+    const promptOverride = synthMode === "crop"
+      ? buildCropPrompt(pairs[0].original, pairs[0].translated, lang)
+      : buildAnnotatedPrompt(pairs, lang);
+
+    console.log(`[WT Premium Hybrid] 조각 ${idx + 1}/${prep.slices.length} 호출 (영역 ${pairs.length}개, ${slice.apiSize || "원본 크기"})`);
+    if (synthEngine === "openai") {
+      return await translateSpriteOpenAI({
+        base64DataUrl: slice.dataUrl,
+        apiKey: message.openaiApiKey || "",
+        model: message.imagePremOpenAISynthModel || "gpt-image-2",
+        targetLang: lang,
+        apiSize: slice.apiSize,
+        promptOverride,
+      });
+    }
+    return await translateSpriteGemini({
+      base64DataUrl: slice.dataUrl,
       apiKey: message.apiKey || "",
       model: message.imagePremGeminiSynthModel || "gemini-3.1-flash-image",
-      translationPairs,
-      targetLang: message.targetLang || "ko",
+      targetLang: lang,
+      promptOverride,
     });
-  }
-  T.api1 = Date.now();
-  console.log(`[WT Premium Hybrid] Image Gen API: ${T.api1 - T.api0}ms`);
+  };
 
-  // 2c. 분할 + 합성 (1회 메시지)
+  const tasks = prep.slices.map((slice, idx) => async () => {
+    try {
+      return { ok: true, url: await callOne(slice, idx) };
+    } catch (e) {
+      console.warn(`[WT Premium Hybrid] 조각 ${idx + 1} 실패:`, e.message);
+      return { ok: false, error: e.message };
+    }
+  });
+  const results = await runWithConcurrency(tasks, 3);
+  T.api1 = Date.now();
+  console.log(`[WT Premium Hybrid] Image Gen API: ${T.api1 - T.api0}ms (성공 ${results.filter(r => r.ok).length}/${results.length})`);
+
+  const items = results
+    .map((r, i) => (r.ok ? { translatedUrl: r.url, meta: prep.slices[i].meta } : null))
+    .filter(Boolean);
+  if (!items.length) {
+    throw new Error("이미지 생성 실패: " + (results.find(r => !r.ok)?.error || "unknown"));
+  }
+
+  // 2c. 합성 (오프스크린: 박스 영역만 페더링 합성)
   T.comp0 = Date.now();
   const compositeResult = await chrome.runtime.sendMessage({
-    action: "splitAndComposite",
-    translatedSpriteUrl,
-    layout: spriteResult.layout,
-    cropBboxes: spriteResult.cropBboxes,
+    action: "compositeSlices",
     originalDataUrl: base64DataUrl,
+    items,
   });
-  if (!compositeResult?.success) throw new Error("분할→합성 실패: " + (compositeResult?.error || "unknown"));
+  if (!compositeResult?.success) throw new Error("합성 실패: " + (compositeResult?.error || "unknown"));
   T.comp1 = Date.now();
 
   const total = T.comp1 - T.start;
   console.log(
-    `[WT Premium Hybrid] ✅ 완료 — 총 ${total}ms\n` +
-    `  PP-OCR: ${(T.ocr1 - T.ocr0)}ms | LLM번역: ${(T.llm1 - T.llm0)}ms\n` +
-    `  크롭→스프라이트: ${(T.sprite1 - T.sprite0)}ms\n` +
+    `[WT Premium Hybrid] ✅ 완료 [${synthMode}] — 총 ${total}ms\n` +
+    `  OCR: ${(T.ocr1 - T.ocr0)}ms | 번역: ${(T.llm1 - T.llm0)}ms\n` +
+    `  조각 준비: ${(T.sprite1 - T.sprite0)}ms\n` +
     `  Image Gen API: ${(T.api1 - T.api0)}ms\n` +
-    `  분할→합성: ${(T.comp1 - T.comp0)}ms`
+    `  합성: ${(T.comp1 - T.comp0)}ms`
   );
 
   await incrementImageCount("premium");

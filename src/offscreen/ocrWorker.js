@@ -555,6 +555,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
     return true;
   }
+
+  // ── 슬라이스 방식 (크롭 개별 호출 / 번호표 전체 이미지 공용) ──
+
+  if (message.action === "prepareSlices") {
+    prepareSlices(message.imageDataUrl, message.mode, message.boxes, message.padding || 15, !!message.padToStandard)
+      .then(result => sendResponse({ success: true, ...result }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
+
+  if (message.action === "compositeSlices") {
+    compositeSlices(message.originalDataUrl, message.items)
+      .then(dataUrl => sendResponse({ success: true, dataUrl }))
+      .catch(err => sendResponse({ success: false, error: String(err?.message || err) }));
+    return true;
+  }
 });
 
 /**
@@ -928,6 +944,222 @@ async function splitAndComposite(translatedSpriteUrl, layout, cropBboxes, origin
 
   console.log(`[OCR Worker] 분할→합성 통합: ${layout.regions.length}개 크롭 (${Date.now() - t0}ms)`);
   return dataUrl;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 슬라이스 방식: 크롭 개별 호출(mode="crop") / 번호표 전체 이미지(mode="annotated") 공용
+// ══════════════════════════════════════════════════════════════
+
+const SLICE_STD_SIZES = [
+  { w: 1024, h: 1024 },
+  { w: 1024, h: 1536 },
+  { w: 1536, h: 1024 },
+];
+
+function blobToDataUrl(blob) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * 세로로 긴 이미지를 박스를 가르지 않는 경계로 분할 (조각 높이 ≤ 너비×1.5).
+ * 가로형이거나 충분히 짧으면 1조각.
+ */
+function planVerticalSlices(imgW, imgH, boxes) {
+  const maxH = Math.max(256, Math.round(imgW * 1.5));
+  if (imgH <= maxH || imgW > imgH) return [{ y: 0, h: imgH }];
+
+  const crosses = (y) => boxes.some(b => b.y < y && b.y + b.height > y);
+  const slices = [];
+  let start = 0;
+  while (start < imgH) {
+    let end = Math.min(imgH, start + maxH);
+    if (end < imgH) {
+      const minCut = start + Math.round(maxH * 0.5);
+      let cut = end;
+      while (cut > minCut && crosses(cut)) cut -= 4;
+      if (!crosses(cut)) end = cut; // 못 찾으면 어쩔 수 없이 maxH에서 절단
+    }
+    slices.push({ y: start, h: end - start });
+    start = end;
+  }
+  return slices;
+}
+
+/**
+ * 번역할 이미지 조각 준비.
+ * - crop: 박스마다 (박스+padding) 영역 1장. 원본 위의 복사본만 사용(원본 불변).
+ * - annotated: 이미지 전체(세로 조각)에 박스별 번호표를 붙임. 박스 바깥 좌상단에 원형 번호표만 그림.
+ * padToStandard=true(OpenAI): 표준 크기(1024x1024/1024x1536/1536x1024) 캔버스에 패딩 + apiSize 반환.
+ */
+async function prepareSlices(imageDataUrl, mode, boxes, padding, padToStandard) {
+  const t0 = Date.now();
+  const img = await loadImageBitmap(imageDataUrl);
+  const W = img.width, H = img.height;
+
+  // 1) 조각 계획
+  let plans = [];
+  if (mode === "crop") {
+    plans = boxes.map((b, i) => {
+      const x = Math.max(0, b.x - padding);
+      const y = Math.max(0, b.y - padding);
+      const x2 = Math.min(W, b.x + b.width + padding);
+      const y2 = Math.min(H, b.y + b.height + padding);
+      return { rect: { x, y, w: x2 - x, h: y2 - y }, boxIdx: [i] };
+    });
+  } else {
+    const sl = planVerticalSlices(W, H, boxes);
+    plans = sl.map(s => ({
+      rect: { x: 0, y: s.y, w: W, h: s.h },
+      boxIdx: boxes.map((b, i) => i).filter(i => {
+        const cy = boxes[i].y + boxes[i].height / 2;
+        return cy >= s.y && cy < s.y + s.h;
+      }),
+    })).filter(p => p.boxIdx.length > 0);
+  }
+
+  // 2) 조각 렌더
+  const slices = [];
+  for (const plan of plans) {
+    const rect = plan.rect;
+
+    let cw = rect.w, ch = rect.h, scale = 1, apiSize = null;
+    if (padToStandard) {
+      let best = SLICE_STD_SIZES.find(s => rect.w <= s.w && rect.h <= s.h);
+      if (!best) {
+        best = rect.w > rect.h ? { w: 1536, h: 1024 } : { w: 1024, h: 1536 };
+        scale = Math.min(best.w / rect.w, best.h / rect.h);
+      }
+      cw = best.w; ch = best.h;
+      apiSize = `${cw}x${ch}`;
+    }
+
+    const canvas = new OffscreenCanvas(cw, ch);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#E8E8E8";
+    ctx.fillRect(0, 0, cw, ch);
+    // 원본 영역을 복사해서 그림 (원본 이미지는 변경하지 않음)
+    ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h, 0, 0, Math.round(rect.w * scale), Math.round(rect.h * scale));
+
+    // 붙여넣을 영역(패딩 포함, 조각 영역으로 클램프)
+    const pasteBoxes = plan.boxIdx.map(i => {
+      const b = boxes[i];
+      const x = Math.max(rect.x, b.x - padding);
+      const y = Math.max(rect.y, b.y - padding);
+      const x2 = Math.min(rect.x + rect.w, b.x + b.width + padding);
+      const y2 = Math.min(rect.y + rect.h, b.y + b.height + padding);
+      return { x, y, width: x2 - x, height: y2 - y };
+    });
+
+    // 번호표 (annotated 모드)
+    if (mode === "annotated") {
+      const r = Math.max(10, Math.min(18, Math.round(Math.min(rect.w, 1024) * 0.017)));
+      ctx.font = `bold ${Math.round(r * 1.25)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      plan.boxIdx.forEach((bi, n) => {
+        const b = boxes[bi];
+        const lx = (b.x - rect.x) * scale;
+        const ly = (b.y - rect.y) * scale;
+        const cx = Math.min(Math.max(r + 1, lx - r - 2), cw - r - 1);
+        const cy = Math.min(Math.max(r + 1, ly - r - 2), ch - r - 1);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = "#E11D48";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.stroke();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText(String(n + 1), cx, cy + 1);
+      });
+    }
+
+    const blob = await canvas.convertToBlob({ type: "image/png" });
+    slices.push({
+      dataUrl: await blobToDataUrl(blob),
+      apiSize,
+      boxIdx: plan.boxIdx,
+      meta: { rect, scale, canvasW: cw, canvasH: ch, pasteBoxes },
+    });
+  }
+  img.close();
+
+  console.log(`[OCR Worker] 슬라이스 준비 [${mode}]: ${slices.length}개 / 원본 ${W}×${H} (${Date.now() - t0}ms)`);
+  return { slices, imgWidth: W, imgHeight: H };
+}
+
+/**
+ * 생성된 조각에서 박스 영역만 잘라 원본 위에 합성 (가장자리 페더링).
+ * items: [{ translatedUrl, meta }]
+ */
+async function compositeSlices(originalDataUrl, items) {
+  const t0 = Date.now();
+  const bgImg = await loadImageBitmap(originalDataUrl);
+  const W = bgImg.width, H = bgImg.height;
+  const canvas = new OffscreenCanvas(W, H);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bgImg, 0, 0);
+  bgImg.close();
+
+  for (const item of items) {
+    const { rect, scale, canvasW, canvasH, pasteBoxes } = item.meta;
+    const tr = await loadImageBitmap(item.translatedUrl);
+    const sx = tr.width / canvasW;
+    const sy = tr.height / canvasH;
+    const aspectDiff = Math.abs((tr.width / tr.height) / (canvasW / canvasH) - 1);
+    console.log(
+      `[OCR Worker] 슬라이스 출력: 입력 ${canvasW}×${canvasH} → 출력 ${tr.width}×${tr.height} ` +
+      `(scale ${sx.toFixed(2)}×${sy.toFixed(2)}${aspectDiff > 0.03 ? " ⚠️비율 변경" : ""})`
+    );
+
+    for (const pb of pasteBoxes) {
+      const srcX = (pb.x - rect.x) * scale * sx;
+      const srcY = (pb.y - rect.y) * scale * sy;
+      const srcW = pb.width * scale * sx;
+      const srcH = pb.height * scale * sy;
+      featherPaste(ctx, tr, srcX, srcY, srcW, srcH, pb.x, pb.y, pb.width, pb.height, W, H);
+    }
+    tr.close();
+  }
+
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.95 });
+  const dataUrl = await blobToDataUrl(blob);
+  console.log(`[OCR Worker] 슬라이스 합성: ${items.length}개 조각 (${Date.now() - t0}ms)`);
+  return dataUrl;
+}
+
+/**
+ * 소스 이미지의 사각 영역을 대상 위치에 가장자리 페더링하여 그림.
+ * 이미지 외곽에 닿는 변은 페더링하지 않음.
+ */
+function featherPaste(ctx, srcImg, sx, sy, sw, sh, dx, dy, dw, dh, imgW, imgH) {
+  const FEATHER = 12;
+  const f = Math.max(0, Math.min(FEATHER, Math.floor(Math.min(dw, dh) / 4)));
+  if (f === 0) {
+    ctx.drawImage(srcImg, sx, sy, sw, sh, dx, dy, dw, dh);
+    return;
+  }
+  const tmp = new OffscreenCanvas(dw, dh);
+  const tctx = tmp.getContext("2d");
+  tctx.drawImage(srcImg, sx, sy, sw, sh, 0, 0, dw, dh);
+
+  const atL = dx <= 0, atT = dy <= 0;
+  const atR = dx + dw >= imgW, atB = dy + dh >= imgH;
+  const mask = new OffscreenCanvas(dw, dh);
+  const mctx = mask.getContext("2d");
+  const mx0 = atL ? -f * 3 : f, my0 = atT ? -f * 3 : f;
+  const mx1 = atR ? dw + f * 3 : dw - f, my1 = atB ? dh + f * 3 : dh - f;
+  mctx.filter = `blur(${Math.max(1, Math.round(f / 2))}px)`;
+  mctx.fillStyle = "#000";
+  mctx.fillRect(mx0, my0, mx1 - mx0, my1 - my0);
+
+  tctx.globalCompositeOperation = "destination-in";
+  tctx.drawImage(mask, 0, 0);
+  ctx.drawImage(tmp, dx, dy);
 }
 
 console.log("[OCR Worker] Offscreen OCR Worker 초기화 완료 — ort 존재:", typeof ort !== "undefined");

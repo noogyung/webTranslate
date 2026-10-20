@@ -510,6 +510,19 @@
           </label>
         </div>
 
+        <!-- 합성 방식 -->
+        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">합성 방식:</div>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer;">
+            <input type="radio" name="imagePremSynthMode" value="annotated" style="accent-color: #89b4fa; margin-top: 3px;" />
+            <span>🏷️ 번호표 전체 이미지 (기본) — 축소 이미지에 번호표를 붙여 조각(세로 1536px 이하)마다 1회 호출. 비용 적음</span>
+          </label>
+          <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer;">
+            <input type="radio" name="imagePremSynthMode" value="crop" style="accent-color: #89b4fa; margin-top: 3px;" />
+            <span>✂️ 크롭 개별 호출 — 텍스트 영역마다 잘라 1회씩 호출(동시 3개). 품질 높음, 호출 수·비용 많음</span>
+          </label>
+        </div>
+
         <!-- 고급 Gemini -->
         <div id="premGeminiSection">
           <div class="field-row">

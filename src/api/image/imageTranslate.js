@@ -55,18 +55,51 @@ export function buildWebtoonPrompt(targetLang, translationPairs = []) {
  */
 export function buildCropPrompt(originalText, translatedText, targetLang) {
   const langName = getLanguageName(targetLang);
+  const orig = String(originalText).replace(/\n/g, "\\n");
+  const trans = String(translatedText).replace(/\n/g, "\\n");
   return (
     `You are a professional manga/webtoon image editor.\n\n` +
-    `This image contains a small text region from a manga/webtoon page.\n` +
-    `Replace the text "${originalText}" with the ${langName} translation "${translatedText}".\n\n` +
+    `This image is a small crop of a manga/webtoon page containing text.\n` +
+    `Replace the text "${orig}" with the ${langName} translation "${trans}".\n\n` +
     `RULES:\n` +
-    `- PRESERVE the background art, speech bubble, and surrounding elements EXACTLY.\n` +
-    `- Match the original font style, size, weight, and color as closely as possible.\n` +
-    `- The translated text must fit within the same area without overflow.\n` +
+    `- REMOVE the original text completely (no leftover characters or fragments), then draw the translation in its place.\n` +
+    `- The translation MUST fit entirely inside the image. Reduce the font size or add line breaks rather than letting any character be cut off.\n` +
+    `- PRESERVE the background art, speech bubble, and screentones EXACTLY; keep the outer edge pixels unchanged.\n` +
+    `- Match the original font style, weight, and color as closely as possible.\n` +
     `- For SFX (sound effects): Match the original artistic style.\n` +
     `- Do NOT add watermarks, borders, or artifacts.\n` +
-    `- Output ONLY the modified image.`
+    `- Output ONLY the modified image with the same dimensions and aspect ratio.`
   );
+}
+
+/**
+ * 번호표 전체 이미지 프롬프트: 이미지 위에 붙은 번호표 위치의 텍스트를 번역문으로 교체.
+ * translationPairs: [{ original, translated, regionW?, regionH? }] (번호 = 배열 순서 + 1)
+ */
+export function buildAnnotatedPrompt(translationPairs, targetLang) {
+  const langName = getLanguageName(targetLang);
+  let prompt = `You are a professional manga/webtoon image editor.\n\n`;
+  prompt += `This manga page has small red circular tags with white numbers. Each tag sits just outside the top-left corner of one text region.\n`;
+  prompt += `For each numbered tag, replace the text in that region with its ${langName} translation:\n\n`;
+
+  translationPairs.forEach((pair, i) => {
+    const orig = pair.original.replace(/\n/g, "\\n");
+    const trans = pair.translated.replace(/\n/g, "\\n");
+    const size = pair.regionW && pair.regionH ? ` (text area about ${Math.round(pair.regionW)}x${Math.round(pair.regionH)}px)` : "";
+    prompt += `[${i + 1}]${size} "${orig}" → "${trans}"\n`;
+  });
+
+  prompt +=
+    `\nRULES:\n` +
+    `- REMOVE the original text of each numbered region completely (no leftover characters or fragments), then draw the translation in the same place.\n` +
+    `- Each translation MUST fit inside its own text region (speech bubble or text area). Reduce the font size or add line breaks rather than letting characters overflow or be cut off.\n` +
+    `- REMOVE all numbered tags completely from the result and restore the artwork underneath them.\n` +
+    `- Do NOT change anything else: keep all art, other text, speech bubbles, and screentones pixel-identical.\n` +
+    `- Match the original font style, weight, and color.\n` +
+    `- Do NOT add watermarks, borders, or artifacts.\n` +
+    `- Output ONLY the modified image with exactly the same dimensions and aspect ratio.`;
+
+  return prompt;
 }
 
 /**
@@ -125,10 +158,10 @@ function extractGeminiImage(data, label) {
 /**
  * 스프라이트 시트 Gemini Image-to-Image 번역 (1회 API 호출).
  */
-export async function translateSpriteGemini({ base64DataUrl, apiKey, model, translationPairs, targetLang }) {
+export async function translateSpriteGemini({ base64DataUrl, apiKey, model, translationPairs, targetLang, promptOverride }) {
   const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
   const base64Data = base64DataUrl.split(",")[1];
-  const prompt = buildSpritePrompt(translationPairs, targetLang);
+  const prompt = promptOverride || buildSpritePrompt(translationPairs, targetLang);
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
@@ -162,8 +195,8 @@ export async function translateSpriteGemini({ base64DataUrl, apiKey, model, tran
 /**
  * 스프라이트 시트 OpenAI GPT Image 번역 (1회 API 호출).
  */
-export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, translationPairs, targetLang, apiSize }) {
-  const prompt = buildSpritePrompt(translationPairs, targetLang);
+export async function translateSpriteOpenAI({ base64DataUrl, apiKey, model, translationPairs, targetLang, apiSize, promptOverride }) {
+  const prompt = promptOverride || buildSpritePrompt(translationPairs, targetLang);
   const base64Data = base64DataUrl.split(",")[1];
   const mimeType = base64DataUrl.match(/^data:(image\/[^;]+)/)?.[1] || "image/png";
   const byteChars = atob(base64Data);

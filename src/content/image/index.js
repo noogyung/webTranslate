@@ -104,22 +104,27 @@ async function handleImageTranslation(img) {
   }
 }
 /* ── OCR 정확도 유지 최소 해상도 압축 ─────────────────────────
- * 긴 축 1024px: Vision API OCR 정확도 유지 최솟값
+ * 짧은 축 1024px 기준 (단, 긴 축은 최대 4096px 상한)
+ * 세로로 긴 웹툰(예: 2000×6300)에서 가로 해상도가 과도하게 줄어드는 문제 방지
  * 이미 작은 이미지는 그대로 반환
  * ─────────────────────────────────────────────────────────── */
 async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) {
-  const MAX_LONG_EDGE = 1024;
+  const TARGET_SHORT_EDGE = 1024;
+  const MAX_LONG_EDGE = 4096;
   if (!naturalWidth || !naturalHeight) {
     return { dataUrl: base64DataUrl, width: naturalWidth || 0, height: naturalHeight || 0 };
   }
 
+  const shortEdge = Math.min(naturalWidth, naturalHeight);
   const longEdge = Math.max(naturalWidth, naturalHeight);
-  if (longEdge <= MAX_LONG_EDGE) {
+  if (shortEdge <= TARGET_SHORT_EDGE && longEdge <= MAX_LONG_EDGE) {
     console.log(`[WT Compress] 압축 불필요 (${naturalWidth}×${naturalHeight}px)`);
     return { dataUrl: base64DataUrl, width: naturalWidth, height: naturalHeight };
   }
 
-  const scale = MAX_LONG_EDGE / longEdge;
+  const scaleByShort = shortEdge > TARGET_SHORT_EDGE ? TARGET_SHORT_EDGE / shortEdge : 1;
+  const scaleByLong = longEdge > MAX_LONG_EDGE ? MAX_LONG_EDGE / longEdge : 1;
+  const scale = Math.min(scaleByShort, scaleByLong);
   const targetW = Math.round(naturalWidth * scale);
   const targetH = Math.round(naturalHeight * scale);
 
@@ -203,7 +208,8 @@ async function handleStandardMode(img, imageUrl, compressedWidth, compressedHeig
 /* ── 고급 모드: Step1 OCR모델 + Step2 합성모델 분리 전달 ────── */
 async function handlePremiumMode(img, imageUrl, compressedWidth, compressedHeight, settings) {
   const imagePremSynthEngine = settings.imagePremEngine || "gemini";
-  const tEnd = wtTimer(`고급 번역 [${imagePremSynthEngine}] (OCR → 이미지 합성)`);
+  const imagePremSynthMode = settings.imagePremSynthMode === "crop" ? "crop" : "annotated";
+  const tEnd = wtTimer(`고급 번역 [${imagePremSynthEngine}/${imagePremSynthMode}] (OCR → 이미지 합성)`);
 
   const result = await sendToBackground({
     action: "translatePremium",
@@ -217,6 +223,7 @@ async function handlePremiumMode(img, imageUrl, compressedWidth, compressedHeigh
     // v2.0 고급 번역 엔진 정보
     imageStdEngine: settings.imageStdEngine || "free",
     imagePremSynthEngine,
+    imagePremSynthMode,
     imageStdGeminiModel: settings.imageStdGeminiModel || "",
     imageStdOpenAIModel: settings.imageStdOpenAIModel || "",
     imageStdOtherUrl: settings.imageStdOtherUrl || "",

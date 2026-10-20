@@ -164,6 +164,9 @@ async function initialize() {
   const savedPremEngine = settings.imagePremEngine || "gemini";
   const premRadio = document.querySelector(`input[name="imagePremEngine"][value="${savedPremEngine}"]`);
   if (premRadio) premRadio.checked = true;
+  const savedSynthMode = settings.imagePremSynthMode === "crop" ? "crop" : "annotated";
+  const synthModeRadio = document.querySelector(`input[name="imagePremSynthMode"][value="${savedSynthMode}"]`);
+  if (synthModeRadio) synthModeRadio.checked = true;
   if (imagePremGeminiSynthModelInput) imagePremGeminiSynthModelInput.value = settings.imagePremGeminiSynthModel || "gemini-3.1-flash-image";
   if (imagePremOpenAISynthModelInput) imagePremOpenAISynthModelInput.value = settings.imagePremOpenAISynthModel || "gpt-image-2";
   if (imagePremOtherUrlInput) imagePremOtherUrlInput.value = settings.imagePremOtherUrl || "http://localhost:7860";
@@ -466,6 +469,7 @@ if (saveBtn) {
       imageStdOtherModel: imageStdOtherModelInput ? imageStdOtherModelInput.value.trim() : "qwen2.5-vl",
       // v2.0 고급 번역 엔진
       imagePremEngine: document.querySelector('input[name="imagePremEngine"]:checked')?.value || "gemini",
+      imagePremSynthMode: document.querySelector('input[name="imagePremSynthMode"]:checked')?.value || "annotated",
       imagePremGeminiSynthModel: imagePremGeminiSynthModelInput ? imagePremGeminiSynthModelInput.value.trim() : "gemini-3.1-flash-image",
       imagePremOpenAISynthModel: imagePremOpenAISynthModelInput ? imagePremOpenAISynthModelInput.value.trim() : "gpt-image-2",
       imagePremOtherUrl: imagePremOtherUrlInput ? imagePremOtherUrlInput.value.trim() : "http://localhost:7860",
