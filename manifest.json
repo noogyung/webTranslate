@@ -40,6 +40,7 @@
       "resources": [
         "src/content/*",
         "src/content/image/*",
+        "src/utils/*",
         "src/models/*",
         "src/offscreen/*",
         "src/test/*"

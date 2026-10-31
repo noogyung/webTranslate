@@ -59,20 +59,20 @@ export async function translateImageWithVision({
       `Return valid JSON array only. No markdown.\n\n` +
       `[{"eraseBox":[y,x,y,x],"originalText":"...","translatedText":"...(${langName})...","orientation":"horizontal","textColor":"#000000"}]`;
   } else {
-    // GPT / Other Vision: [xmin,ymin,xmax,ymax] 0~1000 정규화 (표준 이미지 좌표계)
+    // GPT / Other Vision: [xmin,ymin,xmax,ymax] 픽셀 좌표계 + JSON Object 반환
+    const wHint = naturalWidth || 1000;
+    const hHint = naturalHeight || 1000;
     prompt =
-      `You are a manga/comic OCR translator. Scan the ENTIRE image from top to bottom.\n\n` +
-      dimNote +
-      `Detect every visible text block. Treat each speech bubble, thought bubble, caption, and sound effect as a SEPARATE block.\n\n` +
-      `Return ONLY these 5 fields per block in JSON:\n` +
-      `- eraseBox: [xmin,ymin,xmax,ymax] in normalized 0-1000 scale. Imagine the image as a 1000×1000 grid (0=left/top, 1000=right/bottom).\n` +
-      `  Example: text at upper-right corner → [700,50,980,300]; text at center → [300,400,700,600]\n` +
+      `You are a manga/comic/web OCR translator. Scan the ENTIRE image (${wHint}x${hHint}px) from top to bottom.\n\n` +
+      `Detect every visible text block. Treat each speech bubble, thought bubble, caption, banner title, and sound effect as a SEPARATE block.\n` +
+      `CRITICAL: Group all text lines/columns that belong to the SAME speech bubble or sentence into ONE single block (reading right-to-left for vertical Japanese manga text). Do NOT split a single speech bubble into separate per-column blocks, and do NOT merge two distinct speech bubbles into one.\n\n` +
+      `Return a JSON object with a "blocks" array containing ONLY these 5 fields per block:\n` +
+      `- eraseBox: [xmin,ymin,xmax,ymax] in PIXEL coordinates within the ${wHint}x${hHint} image (0 <= xmin < xmax <= ${wHint}, 0 <= ymin < ymax <= ${hHint}).\n` +
       `- originalText: exact text extracted, line breaks as \\n.\n` +
-      `- translatedText: ${langName} translation. Preserve line breaks.\n` +
+      `- translatedText: natural ${langName} translation. Preserve line breaks.\n` +
       `- orientation: "horizontal" | "vertical" (vertical = text runs top-to-bottom).\n` +
-      `- textColor: text color as #RRGGBB.\n` +
-      `Return valid JSON array only. No markdown fences.\n\n` +
-      `[{"eraseBox":[x1,y1,x2,y2],"originalText":"...","translatedText":"...","orientation":"horizontal","textColor":"#000000"}]`;
+      `- textColor: text color as #RRGGBB.\n\n` +
+      `{"blocks":[{"eraseBox":[x1,y1,x2,y2],"originalText":"...","translatedText":"...(${langName})...","orientation":"horizontal","textColor":"#000000"}]}`;
   }
 
   let rawContent = "";
@@ -82,6 +82,7 @@ export async function translateImageWithVision({
     if (!key) throw new Error("OpenAI API Key가 설정되지 않았습니다.");
     if (!openaiModel) throw new Error("OpenAI Vision 모델명이 설정되지 않았습니다.");
 
+    const reasoning = isReasoningModel(openaiModel);
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -91,8 +92,8 @@ export async function translateImageWithVision({
           { type: "text", text: prompt },
           { type: "image_url", image_url: { url: base64DataUrl, detail: "high" } }
         ]}],
-        max_completion_tokens: 2048,
-        ...(!isReasoningModel(openaiModel) && { temperature: 0.0 }),
+        max_completion_tokens: 8192,
+        ...(reasoning ? { reasoning_effort: "low" } : { temperature: 0.0 }),
         response_format: { type: "json_object" },
       }),
     });
@@ -217,9 +218,11 @@ export function normalizeBox(rawBox, naturalWidth, naturalHeight, isGeminiOrder 
     [c_xmin, c_ymin, c_xmax, c_ymax] = rawBox;
   }
 
-  // 0~1000 정규화 좌표 자동 감지
+  // Gemini는 항상 0~1000 정규화 좌표 반환, GPT/Other는 픽셀 좌표 반환(초과 시에만 0~1000 폴백)
   const maxCoord = Math.max(c_xmin, c_ymin, c_xmax, c_ymax);
-  const isNorm = maxCoord <= 1000 && (naturalWidth > 1000 || naturalHeight > 1000);
+  const isNorm = isGeminiOrder
+    ? (maxCoord <= 1000 && Boolean(naturalWidth && naturalHeight))
+    : (maxCoord <= 1000 && Boolean(naturalWidth && naturalHeight) && (c_xmax > naturalWidth * 1.05 || c_ymax > naturalHeight * 1.05));
 
   const px_x1 = isNorm ? (c_xmin / 1000) * naturalWidth : c_xmin;
   const px_y1 = isNorm ? (c_ymin / 1000) * naturalHeight : c_ymin;

@@ -7,6 +7,8 @@
  * - 위치: 박스 가운데 정렬 (수직/수평 모두)
  * ──────────────────────────────────────────── */
 
+import { applyLocalDictionary } from "../../utils/dictionary.js";
+
 /**
  * Canvas 위에 번역 오버레이를 렌더링.
  * @param {HTMLCanvasElement} canvas
@@ -14,8 +16,9 @@
  * @param {Array} blocks - normalizeBox 적용된 블록 배열
  * @param {number} naturalWidth
  * @param {number} naturalHeight
+ * @param {Array} [customDict=[]] - 사용자 사전 배열
  */
-export function renderTranslatedOverlay(canvas, sourceImg, blocks, naturalWidth, naturalHeight) {
+export function renderTranslatedOverlay(canvas, sourceImg, blocks, naturalWidth, naturalHeight, customDict = []) {
   canvas.width = naturalWidth;
   canvas.height = naturalHeight;
   const ctx = canvas.getContext("2d");
@@ -25,9 +28,10 @@ export function renderTranslatedOverlay(canvas, sourceImg, blocks, naturalWidth,
 
     const { x, y, width, height } = block.eraseBox;
     const orientation = block.orientation || "horizontal";
+    const displayText = applyLocalDictionary(block.translatedText, customDict);
 
     console.log(
-      `%c[WT Canvas] #${blockIdx} "${block.originalText?.substring(0, 20)}" → "${block.translatedText?.substring(0, 20)}"`,
+      `%c[WT Canvas] #${blockIdx} "${block.originalText?.substring(0, 20)}" → "${displayText?.substring(0, 20)}"`,
       "color: #a6e3a1; font-size: 11px;",
       `| ${orientation} | eraseBox: x=${x} y=${y} w=${width} h=${height}`
     );
@@ -39,12 +43,28 @@ export function renderTranslatedOverlay(canvas, sourceImg, blocks, naturalWidth,
 
     ctx.save();
 
+    // 원문 완전 차폐용 불투명 흰색 라운드 박스 배경
+    const BG_PAD = 2;
+    const bx = Math.max(0, x - BG_PAD);
+    const by = Math.max(0, y - BG_PAD);
+    const bw = Math.min(naturalWidth - bx, width + BG_PAD * 2);
+    const bh = Math.min(naturalHeight - by, height + BG_PAD * 2);
+    const radius = Math.min(6, bw / 4, bh / 4);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.97)";
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(bx, by, bw, bh, radius);
+    } else {
+      ctx.rect(bx, by, bw, bh);
+    }
+    ctx.fill();
+
     // 폰트 크기 결정
-    const fontSize = calculateFitFontSize(ctx, block.translatedText, drawW, drawH);
+    const fontSize = calculateFitFontSize(ctx, displayText, drawW, drawH);
     ctx.font = `bold ${fontSize}px sans-serif`;
 
     // 줄 계산 (세로 중앙 정렬에 필요)
-    const lines = getWrappedLines(ctx, block.translatedText, drawW);
+    const lines = getWrappedLines(ctx, displayText, drawW);
     const lineHeight = fontSize * 1.25;
     const totalTextHeight = lines.length * lineHeight;
 

@@ -321,8 +321,12 @@ function groupAdjacentBlocks(blocks) {
     var members = groups[keys[ki]];
     if (members.length === 1) { result.push(members[0]); continue; }
 
-    // 우→좌 정렬 (만화 세로 텍스트 읽기 순서)
-    members.sort(function (a, b) { return b.x - a.x; });
+    // 세로쓰기: 우→좌 정렬 / 가로쓰기: 위→아래 정렬
+    if (members[0].isVertical) {
+      members.sort(function (a, b) { return b.x - a.x; });
+    } else {
+      members.sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+    }
 
     var x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity, confSum = 0;
     for (var mi = 0; mi < members.length; mi++) {
@@ -346,15 +350,24 @@ function groupAdjacentBlocks(blocks) {
 }
 
 function shouldGroup(a, b) {
+  if (Boolean(a.isVertical) !== Boolean(b.isVertical)) return false;
   var ax2 = a.x + a.width, bx2 = b.x + b.width;
   var ay2 = a.y + a.height, by2 = b.y + b.height;
   var hOverlap = Math.min(ax2, bx2) - Math.max(a.x, b.x);
-  var maxW = Math.max(a.width, b.width);
-  if (hOverlap < -maxW * 0.5) return false;
   var vOverlap = Math.min(ay2, by2) - Math.max(a.y, b.y);
-  var minH = Math.min(a.height, b.height);
-  if (vOverlap < minH * 0.3) return false;
-  return true;
+  if (a.isVertical) {
+    var minW = Math.min(a.width, b.width);
+    var minH = Math.min(a.height, b.height);
+    var maxH = Math.max(a.height, b.height);
+    var topDiff = Math.abs(a.y - b.y);
+    return hOverlap >= -minW * 0.25 && vOverlap >= minH * 0.5 && topDiff <= maxH * 0.28;
+  } else {
+    var minW = Math.min(a.width, b.width);
+    var minH = Math.min(a.height, b.height) || 1;
+    var maxH = Math.max(a.height, b.height);
+    if (maxH / minH > 1.8) return false;
+    return hOverlap >= minW * 0.3 && vOverlap >= -maxH * 0.5;
+  }
 }
 
 // ── 시각화 ──

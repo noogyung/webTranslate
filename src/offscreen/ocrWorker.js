@@ -449,8 +449,12 @@ function groupAdjacentBlocks(blocks) {
       continue;
     }
 
-    // 우→좌 정렬 (x 내림차순) — 만화 세로 텍스트 읽기 순서
-    members.sort((a, b) => b.bbox.x - a.bbox.x);
+    // 세로쓰기: 우→좌 정렬 (x 내림차순) / 가로쓰기: 위→아래 정렬 (y 오름차순)
+    if (members[0].isVertical) {
+      members.sort((a, b) => b.bbox.x - a.bbox.x);
+    } else {
+      members.sort((a, b) => a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x);
+    }
 
     // 바운딩 박스 합산
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
@@ -476,22 +480,32 @@ function groupAdjacentBlocks(blocks) {
 }
 
 function shouldGroup(a, b) {
+  if (Boolean(a.isVertical) !== Boolean(b.isVertical)) return false;
+
   const ax1 = a.bbox.x, ax2 = a.bbox.x + a.bbox.width;
   const bx1 = b.bbox.x, bx2 = b.bbox.x + b.bbox.width;
   const ay1 = a.bbox.y, ay2 = a.bbox.y + a.bbox.height;
   const by1 = b.bbox.y, by2 = b.bbox.y + b.bbox.height;
 
-  // 수평: 겹침 또는 간격 < 큰 박스 너비의 50%
   const hOverlap = Math.min(ax2, bx2) - Math.max(ax1, bx1);
-  const maxW = Math.max(a.bbox.width, b.bbox.width);
-  if (hOverlap < -maxW * 0.5) return false; // 너무 떨어짐
-
-  // 수직: 겹침 > 작은 박스 높이의 30%
   const vOverlap = Math.min(ay2, by2) - Math.max(ay1, by1);
-  const minH = Math.min(a.bbox.height, b.bbox.height);
-  if (vOverlap < minH * 0.3) return false;
 
-  return true;
+  if (a.isVertical) {
+    // 세로쓰기: 같은 말풍선 내 인접 세로줄만 병합 (서로 다른 인접 말풍선 과병합 방지)
+    // 1) 수평 간격이 좁은 쪽 줄 폭의 25% 이내이고, 2) 상단 시작 y 차이가 큰 쪽 높이의 28% 이내이며, 3) 수직 겹침이 작은 쪽 높이의 50% 이상
+    const minW = Math.min(a.bbox.width, b.bbox.width);
+    const minH = Math.min(a.bbox.height, b.bbox.height);
+    const maxH = Math.max(a.bbox.height, b.bbox.height);
+    const topDiff = Math.abs(ay1 - by1);
+    return hOverlap >= -minW * 0.25 && vOverlap >= minH * 0.5 && topDiff <= maxH * 0.28;
+  } else {
+    // 가로쓰기: 글자 크기(높이)가 유사하고(<=1.8배) 수평 겹침(> 작은 박스 너비의 30%) + 수직 인접(< 큰 박스 높이의 50%)
+    const minW = Math.min(a.bbox.width, b.bbox.width);
+    const minH = Math.min(a.bbox.height, b.bbox.height) || 1;
+    const maxH = Math.max(a.bbox.height, b.bbox.height);
+    if (maxH / minH > 1.8) return false;
+    return hOverlap >= minW * 0.3 && vOverlap >= -maxH * 0.5;
+  }
 }
 
 // ── 메시지 핸들러 ──

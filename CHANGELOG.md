@@ -7,7 +7,17 @@
 
 ### Added
 - **이미지 번역 전담 모듈 구조화**: `src/content/image/` (호버 감지, 캔버스 오버레이 렌더러, 다이얼로그)
+- **PP-OCRv6 로컬 WASM OCR 엔진 (`free`)**: Offscreen Document 기반 DBNet 텍스트 검출 + 50개 언어 통합 CTC 인식 + 인접 말풍선/행 그룹화 (`src/offscreen/ocrWorker.js`)
+- **고급 하이브리드 이미지 합성 파이프라인 (`annotated` / `clean`)**: PP-OCRv6 검출 + 텍스트 번역 후 1024×1024 슬라이스 기반 AI 이미지 합성 (`src/background/imageSliceManager.js`, `src/api/image/synthesis.js`)
+- **Pixiv(`pximg.net`) 직접 탐색 및 다운로드 호환**: `declarativeNetRequest` 세션 규칙(ID 9998)을 통한 상시 `Referer: https://www.pixiv.net/` 주입 및 단독 이미지 탭 번역 지원 (`src/background/index.js`, `src/content/image/index.js`)
 - **Git 자동 동기화 워크플로우**: 버전 기반 브랜칭 및 커밋/푸시 규칙 체계화 (`.agents/AGENTS.md`, `scripts/git-sync.ps1`)
+
+### Fixed
+- **인라인 배너 레이아웃 깨짐 및 링크 오작동 방지**: `.wt-img-wrapper` 생성 시 원본 크기/정렬/마진 보존 및 `<a href>` 내부 토글 버튼 클릭 시 페이지 이동 차단 (`src/content/image/overlayManager.js`)
+- **OpenAI Vision (`gpt-5.6-luna`) 빈 응답 및 좌표 쏠림 해결**: 추론 모델 토큰 예산 확대(`max_completion_tokens: 8192`, `reasoning_effort: "low"`), `{"blocks":[...]}` JSON 스키마 일치, 해상도별 픽셀/정규화 좌표 분기 및 말풍선 단위 그룹화 (`src/api/image/vision.js`)
+- **OCR 블록 그룹화 정밀도 개선**: 가로/세로 텍스트 이종 병합 차단, 가로 텍스트 상→하 읽기 순서 정렬, 만화 세로 말풍선 인접 오병합 방지 (`src/offscreen/ocrWorker.js`)
+- **캔버스 오버레이 가독성 및 사용자 사전 연동**: 배경색 샘플링 실패 시 불투명 백색 라운드 박스 폴백으로 원문 비침 제거 및 `applyLocalDictionary` 적용 (`src/content/image/canvasRenderer.js`, `src/background/imageService.js`, `manifest.json`)
+- **번역 배열 인덱스 밀림 및 압축 역효과 방지**: 구두점 전용 블록 필터링 시 인덱스 매핑 보정 및 JPEG 재인코딩 시 원본보다 용량이 커지는 경우 원본 유지 (`src/background/imageService.js`, `src/content/image/index.js`)
 
 ---
 

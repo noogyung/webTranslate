@@ -15,7 +15,7 @@ let isProcessing = false;
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action !== "triggerImageTranslation") return;
 
-  const img = getHoveredImage();
+  const img = getHoveredImage() || (document.images.length === 1 ? document.images[0] : null);
   if (!img) return;
 
   // 이미 번역된 이미지 → 토글
@@ -135,7 +135,12 @@ async function compressBase64ForOcr(base64DataUrl, naturalWidth, naturalHeight) 
       canvas.width = targetW;
       canvas.height = targetH;
       canvas.getContext("2d").drawImage(image, 0, 0, targetW, targetH);
-      const compressed = canvas.toDataURL("image/jpeg", 0.92);
+      const compressed = canvas.toDataURL("image/jpeg", 0.88);
+      if (compressed.length > base64DataUrl.length && longEdge <= 1600) {
+        console.log(`[WT Compress] 압축본이 원본보다 큼(${Math.round(compressed.length / base64DataUrl.length * 100)}%) — 원본 유지 (${naturalWidth}×${naturalHeight}px)`);
+        resolve({ dataUrl: base64DataUrl, width: naturalWidth, height: naturalHeight });
+        return;
+      }
       const ratio = Math.round(compressed.length / base64DataUrl.length * 100);
       console.log(`[WT Compress] ${naturalWidth}×${naturalHeight} → ${targetW}×${targetH}px | 크기 ${ratio}%`);
       resolve({ dataUrl: compressed, width: targetW, height: targetH });
@@ -201,7 +206,7 @@ async function handleStandardMode(img, imageUrl, compressedWidth, compressedHeig
   console.groupEnd();
 
   const tRender = wtTimer("Canvas 렌더링");
-  createCanvasOverlay(img, result.blocks);
+  createCanvasOverlay(img, result.blocks, settings.customDict || []);
   tRender();
 }
 

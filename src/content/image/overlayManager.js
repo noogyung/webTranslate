@@ -11,7 +11,7 @@ const OVERLAY_CLASS = "wt-image-overlay-wrap";
  * @param {HTMLImageElement} img - 원본 이미지
  * @param {Array} blocks - normalizeBox 적용된 번역 블록
  */
-export function createCanvasOverlay(img, blocks) {
+export function createCanvasOverlay(img, blocks, customDict = []) {
   const naturalWidth = img.naturalWidth;
   const naturalHeight = img.naturalHeight;
 
@@ -35,7 +35,7 @@ export function createCanvasOverlay(img, blocks) {
   `;
 
   // v2.0: 배경색 자동 추정을 위해 sourceImg 전달
-  renderTranslatedOverlay(canvas, img, blocks, naturalWidth, naturalHeight);
+  renderTranslatedOverlay(canvas, img, blocks, naturalWidth, naturalHeight, customDict);
   wrapper.appendChild(canvas);
 
   // 이미지 마킹
@@ -148,20 +148,27 @@ function ensureWrapper(img) {
     return img.parentElement;
   }
 
-  // img의 현재 computed 스타일 캡처
+  // img의 현재 computed 스타일 및 실제 렌더링 치수 캡처
   const cs = window.getComputedStyle(img);
+  const rect = img.getBoundingClientRect();
   const imgDisplay = cs.display === "inline" ? "inline-block" : cs.display;
+  const vAlign = cs.verticalAlign === "baseline" ? "middle" : cs.verticalAlign;
+  const fixedW = rect.width > 0 ? `${Math.round(rect.width)}px` : (cs.width !== "auto" ? cs.width : "");
+  const fixedH = rect.height > 0 ? `${Math.round(rect.height)}px` : (cs.height !== "auto" ? cs.height : "");
 
   const wrapper = document.createElement("div");
   wrapper.className = OVERLAY_CLASS;
 
-  // wrapper는 img가 차지하던 크기와 동일하게
+  // wrapper는 img가 차지하던 크기·여백·정렬과 동일하게 유지
   wrapper.style.cssText = `
     position: relative;
     display: ${imgDisplay};
+    vertical-align: ${vAlign};
     line-height: 0;
-    width: ${cs.width !== "auto" ? cs.width : ""};
-    height: ${cs.height !== "auto" ? cs.height : ""};
+    box-sizing: border-box;
+    margin: ${cs.margin};
+    width: ${fixedW};
+    height: ${fixedH};
     max-width: ${cs.maxWidth !== "none" ? cs.maxWidth : ""};
     max-height: ${cs.maxHeight !== "none" ? cs.maxHeight : ""};
     flex-shrink: ${cs.flexShrink};
@@ -171,8 +178,9 @@ function ensureWrapper(img) {
   img.parentNode.insertBefore(wrapper, img);
   wrapper.appendChild(img);
 
-  // img는 wrapper에 꽉 채움 (Canvas와 1:1 대응)
+  // img는 wrapper에 꽉 채움 (Canvas와 1:1 대응, 중복 여백 제거)
   img.style.display = "block";
+  img.style.margin = "0";
   img.style.width = "100%";
   img.style.height = "100%";
 
@@ -186,19 +194,27 @@ function createToggleButtons(wrapper, img) {
 
   const group = document.createElement("div");
   group.className = "wt-toggle-group";
+  group.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
 
   const btnOriginal = document.createElement("button");
+  btnOriginal.type = "button";
   btnOriginal.className = "wt-toggle-btn wt-toggle-original";
   btnOriginal.textContent = "🔄 원본";
   btnOriginal.addEventListener("click", (e) => {
+    e.preventDefault();
     e.stopPropagation();
     if (img.dataset.wtShowingTranslated === "true") toggleOverlay(img);
   });
 
   const btnTranslated = document.createElement("button");
+  btnTranslated.type = "button";
   btnTranslated.className = "wt-toggle-btn wt-toggle-translated wt-toggle-active";
   btnTranslated.textContent = "▶ 번역";
   btnTranslated.addEventListener("click", (e) => {
+    e.preventDefault();
     e.stopPropagation();
     if (img.dataset.wtShowingTranslated === "false") toggleOverlay(img);
   });

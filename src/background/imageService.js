@@ -3,6 +3,7 @@ import { translatePremiumGemini, translatePremiumOpenAI, translateCropGemini, tr
 import { runCustomOcrServer } from "../api/image/customOcrServer.js";
 import { translateTextArray } from "./translationService.js";
 import { cleanOcrTextForTranslation } from "../utils/cleaner.js";
+import { applyLocalDictionary } from "../utils/dictionary.js";
 import { getSettings } from "../options/storage.js";
 
 /* ── Step D: 세션 내 번역 결과 LRU 캐시 (최대 20개) ─────────── */
@@ -45,6 +46,16 @@ function guessSourceLang(targetLang) {
   if (targetLang === "ko" || targetLang === "en") return "ja"; // 일→한/영 번역이 주 사용 패턴
   if (targetLang === "ja") return "zh"; // 중→일
   return "ja"; // 기본값
+}
+
+async function translateTextArrayWithRetry(texts, settings) {
+  try {
+    return await translateTextArray(texts, settings);
+  } catch (err) {
+    console.warn("[WT] 텍스트 번역 1차 실패, 1초 후 재시도:", err.message);
+    await new Promise(r => setTimeout(r, 1000));
+    return await translateTextArray(texts, settings);
+  }
 }
 
 /* ── 압축 좌표계 → 원본 좌표계 스케일업 ──────────────────────
@@ -177,15 +188,15 @@ export async function handleStandardTranslation(message, sender) {
       result = [];
     } else {
       const settings = await getSettings();
-      const ocrBlocks = ocrResult.blocks;
-      const texts = ocrBlocks
-        .map(b => cleanOcrTextForTranslation(b.text))
-        .filter(t => t.length > 0);
-      const translations = await translateTextArray(texts, settings);
+      const validBlocks = ocrResult.blocks
+        .map(b => ({ ...b, cleanedText: cleanOcrTextForTranslation(b.text) }))
+        .filter(b => b.cleanedText.length > 0);
+      const texts = validBlocks.map(b => b.cleanedText);
+      const translations = await translateTextArrayWithRetry(texts, settings);
 
-      result = ocrBlocks.map((block, i) => ({
+      result = validBlocks.map((block, i) => ({
         originalText: block.text,
-        translatedText: translations[i] || block.text,
+        translatedText: applyLocalDictionary(translations[i] || block.text, settings.customDict),
         eraseBox: block.bbox,
         orientation: block.bbox.width < block.bbox.height ? "vertical" : "horizontal",
       }));
@@ -205,15 +216,16 @@ export async function handleStandardTranslation(message, sender) {
     });
 
     const settings = await getSettings();
-    const texts = ocrBlocks
-      .map(b => cleanOcrTextForTranslation(b.text))
-      .filter(t => t.length > 0);
+    const validBlocks = ocrBlocks
+      .map(b => ({ ...b, cleanedText: cleanOcrTextForTranslation(b.text) }))
+      .filter(b => b.cleanedText.length > 0);
+    const texts = validBlocks.map(b => b.cleanedText);
 
     const translations = await translateTextArray(texts, settings);
 
-    result = ocrBlocks.map((block, i) => ({
+    result = validBlocks.map((block, i) => ({
       originalText: block.text,
-      translatedText: translations[i] || block.text,
+      translatedText: applyLocalDictionary(translations[i] || block.text, settings.customDict),
       eraseBox: block.bbox,
       orientation: "horizontal",
     }));
@@ -357,15 +369,16 @@ export async function handlePremiumTranslation(message, sender) {
       // LLM 텍스트 번역
       T.llm0 = Date.now();
       const settings = await getSettings();
-      const texts = ocrBlocks
-        .map(b => cleanOcrTextForTranslation(b.text))
-        .filter(t => t.length > 0);
-      const translations = await translateTextArray(texts, settings);
+      const validBlocks = ocrBlocks
+        .map(b => ({ ...b, cleanedText: cleanOcrTextForTranslation(b.text) }))
+        .filter(b => b.cleanedText.length > 0);
+      const texts = validBlocks.map(b => b.cleanedText);
+      const translations = await translateTextArrayWithRetry(texts, settings);
       T.llm1 = Date.now();
 
-      translationPairs = ocrBlocks.map((block, i) => ({
+      translationPairs = validBlocks.map((block, i) => ({
         original: block.text,
-        translated: translations[i] || block.text,
+        translated: applyLocalDictionary(translations[i] || block.text, settings.customDict),
         bbox: block.bbox,
       }));
 
@@ -621,8 +634,15 @@ export async function handlePremiumStep2Translation(message, sender) {
 
 export async function fetchImageAsBase64(imageUrl, refererUrl) {
   const ruleId = 9999;
+  let effectiveReferer = refererUrl;
+  try {
+    const u = new URL(imageUrl);
+    if (u.hostname.endsWith("pximg.net")) {
+      effectiveReferer = "https://www.pixiv.net/";
+    }
+  } catch {}
 
-  if (refererUrl && chrome.declarativeNetRequest) {
+  if (effectiveReferer && chrome.declarativeNetRequest) {
     try {
       // urlFilter에 전체 URL 대신 hostname 기반 패턴 사용
       // declarativeNetRequest는 ||hostname/* 형식 지원
@@ -638,12 +658,12 @@ export async function fetchImageAsBase64(imageUrl, refererUrl) {
             action: {
               type: "modifyHeaders",
               requestHeaders: [
-                { header: "Referer", operation: "set", value: refererUrl },
+                { header: "Referer", operation: "set", value: effectiveReferer },
               ],
             },
             condition: {
               urlFilter: urlPattern,
-              resourceTypes: ["xmlhttprequest", "image", "other"],
+              resourceTypes: ["xmlhttprequest", "image", "other", "main_frame", "sub_frame"],
             },
           },
         ],
@@ -656,7 +676,7 @@ export async function fetchImageAsBase64(imageUrl, refererUrl) {
   try {
     // 서비스 워커에서는 Referer 헤더 직접 설정도 가능 (CSP 우회용 이중 처리)
     const headers = {};
-    if (refererUrl) headers["Referer"] = refererUrl;
+    if (effectiveReferer) headers["Referer"] = effectiveReferer;
 
     const response = await fetch(imageUrl, {
       headers,

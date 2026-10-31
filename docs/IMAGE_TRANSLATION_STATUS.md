@@ -131,44 +131,20 @@ Content Script → Background SW → Offscreen Document (ocrWorker.js)
 
 ---
 
-## 5. 미해결 이슈
+## 5. 해결 완료된 주요 이슈 (실사이트 & 만화 검증 완료)
 
-### 🔴 P0: GPT Vision 일반 번역 실패
+### ✅ P0 해결: GPT Vision (`gpt-5.6-luna`) 일반 번역 빈 응답
+- **원인**: 추론 모델이 `reasoning_tokens`로 약 1,400+ 토큰을 소모하여 `max_completion_tokens: 2048` 예산이 고갈되고, `response_format: { type: "json_object" }`와 최상위 배열 프롬프트가 충돌.
+- **해결**: `max_completion_tokens: 8192`, `reasoning_effort: "low"` 적용 및 `{"blocks":[...]}` 스키마 프롬프트 + 말풍선 단위 그룹화 지시(`src/api/image/vision.js`).
 
-**증상**: GPT-5.6-Luna, GPT-4o에서 "감지된 텍스트가 없습니다" 오류 (24초 소요 후 실패).
+### ✅ P1 해결: Vision 좌표 쏠림 및 해상도 스케일 오류
+- **원인**: `naturalWidth <= 1000` 조건으로 픽셀/정규화 좌표를 오판하여 600×850 만화 및 1080×1350 배너에서 좌표 왜곡 발생.
+- **해결**: Gemini는 항상 `0~1000` 정규화 좌표로 변환하고, OpenAI는 실제 픽셀 좌표(해상도 초과 시에만 정규화 폴백)로 처리(`normalizeBox`).
 
-**원인 추정**: `v1/chat/completions` 엔드포인트 방식이 최신 GPT-5.x 모델에서 지원되지 않음. **Responses API** 방식으로 전환 필요.
-
-**참조 문서**: https://developers.openai.com/api/docs/guides/images-vision?api-mode=responses
-
-**현재 코드** (`src/api/image/vision.js` L85-98):
-```javascript
-const res = await fetch("https://api.openai.com/v1/chat/completions", {
-  body: JSON.stringify({
-    model: openaiModel,
-    messages: [{ role: "user", content: [
-      { type: "text", text: prompt },
-      { type: "image_url", image_url: { url: base64DataUrl, detail: "high" } }
-    ]}],
-    max_completion_tokens: 2048,
-    ...(!isReasoningModel(openaiModel) && { temperature: 0.0 }),
-    response_format: { type: "json_object" },
-  }),
-});
-```
-
-### 🟡 P1: GPT-4o-mini 좌표 쏠림
-
-번역 자체는 성공하나 모든 텍스트 박스가 한 지점에 집중. 좌표 파싱/정규화 변환 문제 가능성.
-
-### 🟡 P2: PP-OCR 고급 모드 하이브리드 파이프라인
-
-PP-OCR 검출 → 박스별 크롭만 Vision API에 전송 → 번역된 크롭 합성.
-구현 계획서 별도 문서(`docs/HYBRID_PIPELINE_PLAN.md`) 참조.
-
-### 🟢 P3: 처리 시간 최적화 (보류)
-
-사용자 지시에 의해 보류 중.
+### ✅ P2 해결: 실사용 UI/레이아웃 및 만화 말풍선 그룹화 버그
+- **인라인 배너 레이아웃 및 `<a href>` 토글 버그**: `.wt-img-wrapper` 고정 크기/정렬/마진 보존 및 토글 버튼 `preventDefault()` + `stopPropagation()` 적용(`src/content/image/overlayManager.js`).
+- **가로 배너 역순 병합 및 만화 인접 말풍선 오병합**: 가로/세로 혼용 병합 차단, 가로 블록 상→하 정렬, 세로 말풍선 `topDiff`/`vOverlap` 임계치 정밀화(`src/offscreen/ocrWorker.js`).
+- **Pixiv(`pximg.net`) 403 차단 해소**: `declarativeNetRequest` 상시 세션 규칙(ID 9998)으로 `Referer: https://www.pixiv.net/` 자동 주입(`src/background/index.js`).
 
 ---
 
