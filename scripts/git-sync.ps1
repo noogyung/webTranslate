@@ -1,4 +1,4 @@
-# WebTranslator Git Sync Helper Script
+﻿# WebTranslator Git Sync Helper Script
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/git-sync.ps1 -Message "feat(scope): commit message"
 
 param (
