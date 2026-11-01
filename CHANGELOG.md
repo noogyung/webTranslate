@@ -10,7 +10,7 @@
 - **PP-OCRv6 로컬 WASM OCR 엔진 (`free`)**: Offscreen Document 기반 DBNet 텍스트 검출 + 50개 언어 통합 CTC 인식 + 인접 말풍선/행 그룹화 (`src/offscreen/ocrWorker.js`)
 - **고급 하이브리드 이미지 합성 파이프라인 (`annotated` / `clean`)**: PP-OCRv6 검출 + 텍스트 번역 후 1024×1024 슬라이스 기반 AI 이미지 합성 (`src/background/imageSliceManager.js`, `src/api/image/synthesis.js`)
 - **Pixiv(`pximg.net`) 직접 탐색 및 다운로드 호환**: `declarativeNetRequest` 세션 규칙(ID 9998)을 통한 상시 `Referer: https://www.pixiv.net/` 주입 및 단독 이미지 탭 번역 지원 (`src/background/index.js`, `src/content/image/index.js`)
-- **Git 자동 동기화 워크플로우**: 버전 기반 브랜칭 및 커밋/푸시 규칙 체계화 (`.agents/AGENTS.md`, `scripts/git-sync.ps1`)
+- **개인 개발용 3계층 Git 브랜치 전략 및 가드레일 적용**: `main`(배포 전용) + `v2.0-dev`(버전 통합) + `feat/*`, `fix/*`, `exp/*`(격리/Squash Merge) 구조 확립 및 `main` 직접 커밋 차단/강제 브랜치 전환 제거 (`.agents/AGENTS.md`, `scripts/git-sync.ps1`)
 
 ### Fixed
 - **인라인 배너 레이아웃 깨짐 및 링크 오작동 방지**: `.wt-img-wrapper` 생성 시 원본 크기/정렬/마진 보존 및 `<a href>` 내부 토글 버튼 클릭 시 페이지 이동 차단 (`src/content/image/overlayManager.js`)
@@ -26,7 +26,7 @@
 ### Added
 - **인라인 전체 페이지 번역**: 원본 레이아웃 및 스타일을 보존하는 `Alt + A` 텍스트 번역 엔진
 - **선택 영역 사전 팝업**: 텍스트 드래그 시 1초 내외 발음기호, 품사, 핵심 뜻 3개 및 예문 제공
-- **다중 번역 및 LLM 엔진**: Google Translate, Google Gemini, OpenAI, Claude, Ollama, LibreTranslate, Custom API
+- **다중 번역 및 LLM 엔진**: Google Translate, Google Gemini, OpenAI, Claude, Ollama, LibreTranslate
 - **적응형 다크모드**: 웹페이지 배경 휘도 실시간 계산 및 보색/명도 대비 최적화 색상 렌더링
 - **툴바 팝업(`Popup`)**: 빠른 엔진/언어 전환 및 실시간 테마 미리보기
 - **사용자 사전 & CSV 관리**: 고유명사/전문용어 사전 CRUD 및 CSV 내보내기/가져오기
