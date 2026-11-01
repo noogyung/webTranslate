@@ -17,3 +17,17 @@ secrets/
 Thumbs.db
 *.tmp
 *.swp
+
+# Site verification files
+google*.html
+
+# Binary / executable files
+*.exe
+*.dll
+*.bin
+
+# ONNX models & WASM runtime (large binary, download separately)
+src/models/*.onnx
+src/models/*.wasm
+src/models/*.mjs
+src/models/ort*.js

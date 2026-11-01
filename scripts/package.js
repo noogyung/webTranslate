@@ -42,6 +42,7 @@ const includeItems = [
 // 복사 시 제외할 패턴
 const excludePatterns = [
   "_archive",
+  "models",
   ".DS_Store",
   "Thumbs.db",
   "*.test.js",
